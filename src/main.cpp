@@ -296,48 +296,61 @@ void printDeviceInfo(const std::shared_ptr<ob::DeviceInfo> info) {
 }
 
 void listDevices(ob::Context &ctx) {
-  ctx.enableNetDeviceEnumeration(false);
-  ctx.setLoggerSeverity(OB_LOG_SEVERITY_DEBUG);
-  ctx.setDeviceChangedCallback([](std::shared_ptr<ob::DeviceList> removedList,
-                                  std::shared_ptr<ob::DeviceList> deviceList) {
-    try {
-      std::cout << " Devices Removed:\n";
-      int devCount = removedList->getCount();
-      for (size_t i = 0; i < devCount; i++) {
-        auto dev = removedList->getDevice(i);
-        auto info = dev->getDeviceInfo();
-        printDeviceInfo(info);
-      }
+  try {
+    ctx.enableNetDeviceEnumeration(false);
+    ctx.setLoggerSeverity(OB_LOG_SEVERITY_DEBUG);
+    ctx.setDeviceChangedCallback(
+        [](std::shared_ptr<ob::DeviceList> removedList,
+           std::shared_ptr<ob::DeviceList> deviceList) {
+          try {
+            int devCount = removedList->getCount();
+            if (devCount > 0) {
+              std::cout << " Devices Removed:\n";
+              for (size_t i = 0; i < devCount; i++) {
+                auto dev = removedList->getDevice(i);
+                auto info = dev->getDeviceInfo();
+                printDeviceInfo(info);
+              }
+            }
 
-      devCount = deviceList->getCount();
-      for (size_t i = 0; i < devCount; i++) {
-        auto dev = deviceList->getDevice(i);
-        auto info = dev->getDeviceInfo();
-        printDeviceInfo(info);
-      }
-    } catch (ob::Error &e) {
-      std::cerr << "function:" << e.getFunction() << "\nargs:" << e.getArgs()
-                << "\nname:" << e.getName() << "\nmessage:" << e.what()
-                << "\ntype:" << e.getExceptionType() << std::endl;
-    }
-  });
-  auto devList = ctx.queryDeviceList();
-  int devCount = devList->getCount();
-  std::cout << "devCount: " << devCount << "\n";
-  for (size_t i = 0; i < devCount; i++) {
-    auto dev = devList->getDevice(i);
-    auto info = dev->getDeviceInfo();
-    printDeviceInfo(info);
-    std::cout << "device state: " << dev->getDeviceState();
-    dev->setDeviceStateChangedCallback(
-        [](OBDeviceState state, const char *message) {
-          std::cout << "DeviceStateChangedCallback:\n"
-                    << "state: " << state << "\n"
-                    << " message: " << message << "\n";
+            devCount = deviceList->getCount();
+            if (devCount > 0) {
+              std::cout << " Devices added:\n";
+              for (size_t i = 0; i < devCount; i++) {
+                auto dev = deviceList->getDevice(i);
+                auto info = dev->getDeviceInfo();
+                printDeviceInfo(info);
+              }
+            }
+          } catch (ob::Error &e) {
+            std::cerr << "function:" << e.getFunction()
+                      << "\nargs:" << e.getArgs() << "\nname:" << e.getName()
+                      << "\nmessage:" << e.what()
+                      << "\ntype:" << e.getExceptionType() << std::endl;
+          }
         });
+    auto devList = ctx.queryDeviceList();
+    int devCount = devList->getCount();
+    std::cout << "devCount: " << devCount << "\n";
+    for (size_t i = 0; i < devCount; i++) {
+      auto dev = devList->getDevice(i);
+      auto info = dev->getDeviceInfo();
+      printDeviceInfo(info);
+      std::cout << "device state: " << dev->getDeviceState();
+      dev->setDeviceStateChangedCallback(
+          [](OBDeviceState state, const char *message) {
+            std::cout << "DeviceStateChangedCallback:\n"
+                      << "state: " << state << "\n"
+                      << " message: " << message << "\n";
+          });
+    }
+    std::cout << "waiting for key press\n";
+    std::cin.get();
+  } catch (ob::Error &e) {
+    std::cerr << "function:" << e.getFunction() << "\nargs:" << e.getArgs()
+              << "\nname:" << e.getName() << "\nmessage:" << e.what()
+              << "\ntype:" << e.getExceptionType() << std::endl;
   }
-  std::cout << "waiting for key press\n";
-  std::cin.get();
 }
 
 int main() {
