@@ -300,19 +300,25 @@ void listDevices(ob::Context &ctx) {
   ctx.setLoggerSeverity(OB_LOG_SEVERITY_DEBUG);
   ctx.setDeviceChangedCallback([](std::shared_ptr<ob::DeviceList> removedList,
                                   std::shared_ptr<ob::DeviceList> deviceList) {
-    std::cout << " Devices Removed:\n";
-    int devCount = removedList->getCount();
-    for (size_t i = 0; i < devCount; i++) {
-      auto dev = removedList->getDevice(i);
-      auto info = dev->getDeviceInfo();
-      printDeviceInfo(info);
-    }
+    try {
+      std::cout << " Devices Removed:\n";
+      int devCount = removedList->getCount();
+      for (size_t i = 0; i < devCount; i++) {
+        auto dev = removedList->getDevice(i);
+        auto info = dev->getDeviceInfo();
+        printDeviceInfo(info);
+      }
 
-    devCount = deviceList->getCount();
-    for (size_t i = 0; i < devCount; i++) {
-      auto dev = deviceList->getDevice(i);
-      auto info = dev->getDeviceInfo();
-      printDeviceInfo(info);
+      devCount = deviceList->getCount();
+      for (size_t i = 0; i < devCount; i++) {
+        auto dev = deviceList->getDevice(i);
+        auto info = dev->getDeviceInfo();
+        printDeviceInfo(info);
+      }
+    } catch (ob::Error &e) {
+      std::cerr << "function:" << e.getFunction() << "\nargs:" << e.getArgs()
+                << "\nname:" << e.getName() << "\nmessage:" << e.what()
+                << "\ntype:" << e.getExceptionType() << std::endl;
     }
   });
   auto devList = ctx.queryDeviceList();
