@@ -281,6 +281,20 @@ void prev(const ob::Context &context) {
   // makePointCloud(alignedFrames);
 }
 
+void printDeviceList(const std::shared_ptr<ob::DeviceList> devList) {
+  int devCount = devList->getCount();
+  if (devCount > 0) {
+    for (size_t i = 0; i < devCount; i++) {
+      std::cout << "DeviceListElement:" << i << "\n"
+                << "  Name:              " << devList->name(i) << "\n"
+                << "  Serial Number:     " << devList->serialNumber(i) << "\n"
+                << "  UID:               " << devList->uid(i) << "\n"
+                << "  VID:               " << devList->vid(i) << "\n"
+                << "  PID:               " << devList->pid(i) << "\n"
+                << "  Connection Type:   " << devList->connectionType(i) << "\n";
+    }
+  }
+}
 void printDeviceInfo(const std::shared_ptr<ob::DeviceInfo> info) {
   std::cout << "DeviceInfo:\n"
             << "  Name:              " << info->name() << "\n"
@@ -306,6 +320,7 @@ void listDevices(ob::Context &ctx) {
             int devCount = removedList->getCount();
             if (devCount > 0) {
               std::cout << " Devices Removed:\n";
+              printDeviceList(removedList);
               for (size_t i = 0; i < devCount; i++) {
                 auto dev = removedList->getDevice(i);
                 auto info = dev->getDeviceInfo();
@@ -323,7 +338,8 @@ void listDevices(ob::Context &ctx) {
               }
             }
           } catch (ob::Error &e) {
-            std::cerr << "function:" << e.getFunction()
+            std::cerr << "setDeviceChangedCallback\n"
+                      << "function:" << e.getFunction()
                       << "\nargs:" << e.getArgs() << "\nname:" << e.getName()
                       << "\nmessage:" << e.what()
                       << "\ntype:" << e.getExceptionType() << std::endl;
@@ -347,9 +363,11 @@ void listDevices(ob::Context &ctx) {
     std::cout << "waiting for key press\n";
     std::cin.get();
   } catch (ob::Error &e) {
-    std::cerr << "function:" << e.getFunction() << "\nargs:" << e.getArgs()
+    std::cerr << "listDevices\n"
+              << "function:" << e.getFunction() << "\nargs:" << e.getArgs()
               << "\nname:" << e.getName() << "\nmessage:" << e.what()
               << "\ntype:" << e.getExceptionType() << std::endl;
+    throw e;
   }
 }
 
