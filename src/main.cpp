@@ -351,7 +351,10 @@ void listDevices(ob::Context &ctx) {
       auto dev = devList->getDevice(i);
       auto info = dev->getDeviceInfo();
       printDeviceInfo(info);
-      std::cout << "device state: " << dev->getDeviceState();
+      auto deviceState = dev->getDeviceState();
+      if (deviceState) {
+        std::cout << "device state: " << deviceState << "\n";
+      }
       dev->setDeviceStateChangedCallback(
           [](OBDeviceState state, const char *message) {
             std::cout << "DeviceStateChangedCallback:\n"

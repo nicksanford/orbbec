@@ -11,10 +11,6 @@ find_package(OrbbecSDK REQUIRED
     PATHS lib/
     # PATHS OrbbecSDK_v2.4.3_202505192200_045a0e76_macOS/lib/
     NO_DEFAULT_PATH)
-find_package(OpenCV REQUIRED)
-target_link_libraries(orbbec ob::OrbbecSDK ${OpenCV_LIBS})
-
-
-
-
-
+# find_package(OpenCV REQUIRED)
+# target_link_libraries(orbbec ob::OrbbecSDK ${OpenCV_LIBS})
+target_link_libraries(orbbec ob::OrbbecSDK)
