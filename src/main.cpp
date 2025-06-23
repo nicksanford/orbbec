@@ -280,19 +280,29 @@ void prev(const ob::Context &context) {
   // makePointCloud(alignedFrames);
 }
 
-void listDevices(const ob::Context &ctx) {
+void listDevices(ob::Context &ctx) {
   ctx.enableNetDeviceEnumeration(false);
   ctx.setLoggerSeverity(OB_LOG_SEVERITY_DEBUG);
+  // std::function<void(std::shared_ptr<DeviceList> removedList,
+  //                    std::shared_ptr<DeviceList> addedList)>
+  auto cb = [](std::shared_ptr<ob::DeviceList> removedList,
+               std::shared_ptr<ob::DeviceList> deviceList) {};
+  ctx.setDeviceChangedCallback(cb);
   auto devList = ctx.queryDeviceList();
   int devCount = devList->getCount();
   std::cout << "devCount: " << devCount << "\n";
   for (size_t i = 0; i < devCount; i++) {
     auto dev = devList->getDevice(i);
     auto info = dev->getDeviceInfo();
-    std::cout << "Device " << i << ":\n"
-              << "  Name:   " << info->getName() << "\n"
-              << "  Serial Number: " << info->getSerialNumber() << "\n"
-              << "  UID:    " << info->getUid() << "\n";
+    std::cout << "Device " << i << "\n"
+              << "  Name:   " << info->name() << "\n"
+              << "  Serial Number: " << info->serialNumber() << "\n"
+              << "  UID:    " << info->getUid() << "\n"
+              << "  Connection Type:    " << info->connectionType() << "\n"
+              << "  Firmware Version:    " << info->firmwareVersion() << "\n"
+              << "  Min SDK Version:    " << info->supportedMinSdkVersion()
+              << "\n"
+              << "  :    " << info->asicName() << "\n";
   }
 }
 
