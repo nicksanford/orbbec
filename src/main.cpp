@@ -284,21 +284,19 @@ void prev(const ob::Context &context) {
 
 void printDeviceList(const std::shared_ptr<ob::DeviceList> devList) {
   int devCount = devList->getCount();
-  if (devCount > 0) {
-    for (size_t i = 0; i < devCount; i++) {
-      std::cout << "DeviceListElement:" << i << std::endl;
-      std::cout << "  Name:              " << devList->name(i) << std::endl;
-      std::cout << "  Serial Number:     " << devList->serialNumber(i)
-                << std::endl;
-      std::cout << "  UID:               " << devList->uid(i) << std::endl;
+  for (size_t i = 0; i < devCount; i++) {
+    std::cout << "DeviceListElement:" << i << std::endl;
+    std::cout << "  Name:              " << devList->name(i) << std::endl;
+    std::cout << "  Serial Number:     " << devList->serialNumber(i)
+              << std::endl;
+    std::cout << "  UID:               " << devList->uid(i) << std::endl;
 
-      std::cout << "  VID:               " << devList->vid(i) << std::endl;
+    std::cout << "  VID:               " << devList->vid(i) << std::endl;
 
-      std::cout << "  PID:               " << devList->pid(i) << std::endl;
+    std::cout << "  PID:               " << devList->pid(i) << std::endl;
 
-      std::cout << "  Connection Type:   " << devList->connectionType(i)
-                << std::endl;
-    }
+    std::cout << "  Connection Type:   " << devList->connectionType(i)
+              << std::endl;
   }
 }
 void printDeviceInfo(const std::shared_ptr<ob::DeviceInfo> info) {
@@ -327,11 +325,6 @@ void listDevices(ob::Context &ctx) {
             if (devCount > 0) {
               std::cout << " Devices Removed:\n";
               printDeviceList(removedList);
-              for (size_t i = 0; i < devCount; i++) {
-                auto dev = removedList->getDevice(i);
-                auto info = dev->getDeviceInfo();
-                printDeviceInfo(info);
-              }
             }
 
             devCount = deviceList->getCount();
