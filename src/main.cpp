@@ -1,5 +1,6 @@
 
-#include <chrono>
+// #include <chrono>
+#include <cstdio>
 #include <iostream>
 #include <libobsensor/ObSensor.hpp>
 // #include <opencv2/opencv.hpp>
@@ -280,30 +281,57 @@ void prev(const ob::Context &context) {
   // makePointCloud(alignedFrames);
 }
 
+void printDeviceInfo(const std::shared_ptr<ob::DeviceInfo> info) {
+  std::cout << "DeviceInfo:\n"
+            << "  Name:              " << info->name() << "\n"
+            << "  Serial Number:     " << info->serialNumber() << "\n"
+            << "  UID:               " << info->uid() << "\n"
+            << "  VID:               " << info->vid() << "\n"
+            << "  PID:               " << info->pid() << "\n"
+            << "  Connection Type:   " << info->connectionType() << "\n"
+            << "  Firmware Version:  " << info->firmwareVersion() << "\n"
+            << "  Hardware Version:  " << info->hardwareVersion() << "\n"
+            << "  Min SDK Version:   " << info->supportedMinSdkVersion() << "\n"
+            << "  ASIC::             " << info->asicName() << "\n";
+}
+
 void listDevices(ob::Context &ctx) {
   ctx.enableNetDeviceEnumeration(false);
   ctx.setLoggerSeverity(OB_LOG_SEVERITY_DEBUG);
-  // std::function<void(std::shared_ptr<DeviceList> removedList,
-  //                    std::shared_ptr<DeviceList> addedList)>
-  auto cb = [](std::shared_ptr<ob::DeviceList> removedList,
-               std::shared_ptr<ob::DeviceList> deviceList) {};
-  ctx.setDeviceChangedCallback(cb);
+  ctx.setDeviceChangedCallback([](std::shared_ptr<ob::DeviceList> removedList,
+                                  std::shared_ptr<ob::DeviceList> deviceList) {
+    std::cout << " Devices Removed:\n";
+    int devCount = removedList->getCount();
+    for (size_t i = 0; i < devCount; i++) {
+      auto dev = removedList->getDevice(i);
+      auto info = dev->getDeviceInfo();
+      printDeviceInfo(info);
+    }
+
+    devCount = deviceList->getCount();
+    for (size_t i = 0; i < devCount; i++) {
+      auto dev = deviceList->getDevice(i);
+      auto info = dev->getDeviceInfo();
+      printDeviceInfo(info);
+    }
+  });
   auto devList = ctx.queryDeviceList();
   int devCount = devList->getCount();
   std::cout << "devCount: " << devCount << "\n";
   for (size_t i = 0; i < devCount; i++) {
     auto dev = devList->getDevice(i);
     auto info = dev->getDeviceInfo();
-    std::cout << "Device " << i << "\n"
-              << "  Name:   " << info->name() << "\n"
-              << "  Serial Number: " << info->serialNumber() << "\n"
-              << "  UID:    " << info->getUid() << "\n"
-              << "  Connection Type:    " << info->connectionType() << "\n"
-              << "  Firmware Version:    " << info->firmwareVersion() << "\n"
-              << "  Min SDK Version:    " << info->supportedMinSdkVersion()
-              << "\n"
-              << "  :    " << info->asicName() << "\n";
+    printDeviceInfo(info);
+    std::cout << "device state: " << dev->getDeviceState();
+    dev->setDeviceStateChangedCallback(
+        [](OBDeviceState state, const char *message) {
+          std::cout << "DeviceStateChangedCallback:\n"
+                    << "state: " << state << "\n"
+                    << " message: " << message << "\n";
+        });
   }
+  std::cout << "waiting for key press\n";
+  std::cin.get();
 }
 
 int main() {
