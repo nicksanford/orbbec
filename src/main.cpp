@@ -287,8 +287,9 @@
 // }
 
 struct my_device {
+  std::shared_ptr<ob::Device> device;
   std::shared_ptr<ob::Pipeline> pipe;
-  std::shared_ptr<const ob::FrameSet> frameSet;
+  std::shared_ptr<ob::FrameSet> frameSet;
 };
 
 std::mutex devices_by_serial_mu;
@@ -325,19 +326,40 @@ void printDeviceInfo(const std::shared_ptr<ob::DeviceInfo> info) {
             << "  ASIC::             " << info->asicName() << "\n";
 }
 
-void startStreams(std::map<std::string, std::shared_ptr<ob::Pipeline>> &pipes) {
-  for (auto &item : pipes) {
+void startStreams(std::map<std::string, std::shared_ptr<ob::Device>> &devs) {
+  for (auto &item : devs) {
     auto serialNumber = item.first;
-    auto &pipe = item.second;
+    auto &dev = item.second;
 
     std::cout << "starting " << serialNumber << std::endl;
     // config to enable depth and color streams
     std::shared_ptr<ob::Config> config = std::make_shared<ob::Config>();
     config->enableVideoStream(OB_STREAM_COLOR);
     config->enableVideoStream(OB_STREAM_DEPTH);
+    auto spl = config->getEnabledStreamProfileList();
+    int count = spl->getCount();
+    std::vector<std::shared_ptr<ob::VideoStreamProfile>> colorProfiles;
+    std::vector<std::shared_ptr<ob::VideoStreamProfile>> depthProfiles;
+    std::shared_ptr<ob::StreamProfile> profile = nullptr;
+    for (size_t i = 0; i < count; i++) {
+      profile = spl->getProfile(i);
+      switch (profile->getType()) {
+      case OB_STREAM_COLOR:
+        colorProfiles.push_back(profile->as<ob::VideoStreamProfile>());
+        break;
+      case OB_STREAM_DEPTH:
+        depthProfiles.push_back(profile->as<ob::VideoStreamProfile>());
+        break;
+      default:
+        continue;
+      }
+    }
+    // TODO: sort to find best stream profiles with same resolution and fps
 
     std::shared_ptr<my_device> my_dev = std::make_shared<my_device>();
+    auto pipe = std::make_shared<ob::Pipeline>(dev);
     my_dev->pipe = pipe;
+    my_dev->device = dev;
 
     {
       std::lock_guard<std::mutex> lock(devices_by_serial_mu);
@@ -346,10 +368,14 @@ void startStreams(std::map<std::string, std::shared_ptr<ob::Pipeline>> &pipes) {
 
     // start pipeline and pass the callback function to receive the frames
     pipe->start(config, [serialNumber](std::shared_ptr<ob::FrameSet> frameSet) {
+      if (frameSet == nullptr) {
+        return;
+      }
       std::lock_guard<std::mutex> lock(devices_by_serial_mu);
       auto my_dev = devices_by_serial[serialNumber];
       my_dev->frameSet = frameSet;
-      devices_by_serial.insert({serialNumber, my_dev});
+
+      // devices_by_serial.insert({serialNumber, my_dev});
     });
   }
 }
@@ -373,10 +399,14 @@ void listDevices(ob::Context &ctx) {
     auto devList = ctx.queryDeviceList();
     int devCount = devList->getCount();
     std::cout << "devCount: " << devCount << "\n";
+
+    std::shared_ptr<ob::Device> dev = nullptr;
+    std::shared_ptr<ob::DeviceInfo> info = nullptr;
     for (size_t i = 0; i < devCount; i++) {
-      auto dev = devList->getDevice(i);
-      auto info = dev->getDeviceInfo();
+      dev = devList->getDevice(i);
+      info = dev->getDeviceInfo();
       printDeviceInfo(info);
+      dev.reset();
     }
   } catch (ob::Error &e) {
     std::cerr << "listDevices\n"
@@ -414,24 +444,25 @@ int main() {
             continue;
           }
           // todo maybe you don't need this
-          // my_dev->pipe->stop();
+          my_dev->device.reset();
+          my_dev->pipe.reset();
           devices_by_serial.erase(serial_number);
         }
       }
 
       devCount = deviceList->getCount();
       if (devCount > 0) {
-        std::map<std::string, std::shared_ptr<ob::Pipeline>> pipes;
+        std::shared_ptr<ob::Device> dev = nullptr;
+        std::shared_ptr<ob::DeviceInfo> info = nullptr;
+        std::map<std::string, std::shared_ptr<ob::Device>> devs;
         std::cout << " Devices added:\n";
         for (size_t i = 0; i < devCount; i++) {
-          auto dev = deviceList->getDevice(i);
-          auto info = dev->getDeviceInfo();
+          dev = deviceList->getDevice(i);
+          info = dev->getDeviceInfo();
           printDeviceInfo(info);
-          auto serialNumber = info->getSerialNumber();
-          auto pipe = std::make_shared<ob::Pipeline>(dev);
-          pipes.insert({serialNumber, pipe});
+          devs.insert({info->getSerialNumber(), dev});
         }
-        startStreams(pipes);
+        startStreams(devs);
       }
     } catch (ob::Error &e) {
       std::cerr << "setDeviceChangedCallback\n"
@@ -441,19 +472,19 @@ int main() {
     }
   });
 
-  std::map<std::string, std::shared_ptr<ob::Pipeline>> pipes;
+  std::map<std::string, std::shared_ptr<ob::Device>> devs;
   auto devList = ctx.queryDeviceList();
   int devCount = devList->getCount();
+  std::shared_ptr<ob::Device> dev = nullptr;
+  std::shared_ptr<ob::DeviceInfo> info = nullptr;
   std::cout << "devCount: " << devCount << "\n";
   for (size_t i = 0; i < devCount; i++) {
-    auto dev = devList->getDevice(i);
-    auto info = dev->getDeviceInfo();
-    auto pipe = std::make_shared<ob::Pipeline>(dev);
-    auto serialNumber = info->getSerialNumber();
-    pipes.insert({serialNumber, pipe});
+    dev = devList->getDevice(i);
+    info = dev->getDeviceInfo();
+    devs.insert({info->getSerialNumber(), dev});
   }
 
-  startStreams(pipes);
+  startStreams(devs);
 
   std::cout << "NICK! waiting for key press\n";
   std::cin.get();
