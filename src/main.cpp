@@ -3,7 +3,11 @@
 #include <cstdio>
 #include <iostream>
 #include <libobsensor/ObSensor.hpp>
+#include <map>
+#include <memory>
+#include <mutex>
 #include <ostream>
+#include <vector>
 // #include <opencv2/opencv.hpp>
 
 // void saveColor(std::shared_ptr<ob::Frame> colorFrame) {
@@ -117,36 +121,36 @@
 //     ".pcd"; saveRGBPointsToPCD(frame, pcdName);
 // }
 
-void frameCallback(std::shared_ptr<ob::FrameSet> frameset) {
-  // if (!frameset) {
-  //     std::cerr << "no frames" << std::endl;
-  //     return;
-  // }
+// void frameCallback(std::shared_ptr<ob::FrameSet> frameset) {
+// if (!frameset) {
+//     std::cerr << "no frames" << std::endl;
+//     return;
+// }
 
-  // auto color = frameset->colorFrame();
-  // auto depth = frameset->depthFrame();
+// auto color = frameset->colorFrame();
+// auto depth = frameset->depthFrame();
 
-  // auto alignFilter = std::make_shared<ob::Align>(OB_STREAM_COLOR); // Align
-  // depth frame to color frame auto alignedFrames =
-  // alignFilter->process(frameset); std::cout << "got frames" <<  std::endl;
-  // std::cout << frameset->getCount() << std::endl;
+// auto alignFilter = std::make_shared<ob::Align>(OB_STREAM_COLOR); // Align
+// depth frame to color frame auto alignedFrames =
+// alignFilter->process(frameset); std::cout << "got frames" <<  std::endl;
+// std::cout << frameset->getCount() << std::endl;
 
-  // auto colorFrame = frameset->colorFrame();
-  // if(!colorFrame) {
-  //     std::cerr << "couldnt get color frame" << std::endl;
-  // }
+// auto colorFrame = frameset->colorFrame();
+// if(!colorFrame) {
+//     std::cerr << "couldnt get color frame" << std::endl;
+// }
 
-  // auto depthFrame = frameset-> depthFrame();
-  // if (!depthFrame) {
-  //     std::cerr << "couldnt get depth frame" << std::endl;
-  // }
+// auto depthFrame = frameset-> depthFrame();
+// if (!depthFrame) {
+//     std::cerr << "couldnt get depth frame" << std::endl;
+// }
 
-  //  // Run this in the background so we dont miss frames
-  // std::thread([=]() {
-  //     if (colorFrame) saveColor(colorFrame);
-  //     if (depthFrame) saveDepth(depthFrame);
-  // }).detach();
-}
+//  // Run this in the background so we dont miss frames
+// std::thread([=]() {
+//     if (colorFrame) saveColor(colorFrame);
+//     if (depthFrame) saveDepth(depthFrame);
+// }).detach();
+// }
 
 // void deviceChangedCallback(std::shared_ptr<DeviceList> added,
 // std::shared_ptr<DeviceList> removed) {
@@ -170,117 +174,125 @@ void frameCallback(std::shared_ptr<ob::FrameSet> frameset) {
 //     }
 // }
 //
-void prev(const ob::Context &context) {
-  ob::Pipeline pipe;
-  auto deviceList = context.queryDeviceList();
-  int deviceCount = deviceList->deviceCount();
-  std::cout << "Found " << deviceCount << " devices." << std::endl;
-  for (int i = 0; i < deviceCount; ++i) {
-    auto device = deviceList->getDevice(i);
-    auto info = device->getDeviceInfo();
+// void prev(const ob::Context &context) {
+//   ob::Pipeline pipe;
+//   auto deviceList = context.queryDeviceList();
+//   int deviceCount = deviceList->deviceCount();
+//   std::cout << "Found " << deviceCount << " devices." << std::endl;
+//   for (int i = 0; i < deviceCount; ++i) {
+//     auto device = deviceList->getDevice(i);
+//     auto info = device->getDeviceInfo();
 
-    std::string serial = info->getSerialNumber();
-    std::string name = info->getName();
-    std::string uid = info->getUid();
+//     std::string serial = info->getSerialNumber();
+//     std::string name = info->getName();
+//     std::string uid = info->getUid();
 
-    std::cout << "Device " << i + 1 << ":\n"
-              << "  Name:   " << name << "\n"
-              << "  Serial Number: " << serial << "\n"
-              << "  UID:    " << uid << "\n";
-  }
+//     std::cout << "Device " << i + 1 << ":\n"
+//               << "  Name:   " << name << "\n"
+//               << "  Serial Number: " << serial << "\n"
+//               << "  UID:    " << uid << "\n";
+//   }
 
-  // context.setDeviceChangedCallback(deviceChangedCallback);
+//   // context.setDeviceChangedCallback(deviceChangedCallback);
 
-  std::shared_ptr<ob::Config> config = std::make_shared<ob::Config>();
-  auto depthProfiles = pipe.getStreamProfileList(OB_SENSOR_DEPTH);
-  std::shared_ptr<ob::VideoStreamProfile> depthProfile = nullptr;
-  if (depthProfiles) {
-    depthProfile = std::const_pointer_cast<ob::StreamProfile>(
-                       depthProfiles->getProfile(OB_PROFILE_DEFAULT))
-                       ->as<ob::VideoStreamProfile>();
-  }
+//   std::shared_ptr<ob::Config> config = std::make_shared<ob::Config>();
+//   auto depthProfiles = pipe.getStreamProfileList(OB_SENSOR_DEPTH);
+//   std::shared_ptr<ob::VideoStreamProfile> depthProfile = nullptr;
+//   if (depthProfiles) {
+//     depthProfile = std::const_pointer_cast<ob::StreamProfile>(
+//                        depthProfiles->getProfile(OB_PROFILE_DEFAULT))
+//                        ->as<ob::VideoStreamProfile>();
+//   }
 
-  std ::cout << "enabling depth stream" << std::endl;
-  config->enableStream(depthProfile);
+//   std ::cout << "enabling depth stream" << std::endl;
+//   config->enableStream(depthProfile);
 
-  auto colorProfiles = pipe.getStreamProfileList(OB_SENSOR_COLOR);
-  std::shared_ptr<ob::VideoStreamProfile> colorProfile = nullptr;
-  if (colorProfiles) {
-    colorProfile = std::const_pointer_cast<ob::StreamProfile>(
-                       colorProfiles->getProfile(OB_PROFILE_DEFAULT))
-                       ->as<ob::VideoStreamProfile>();
-  }
-  std ::cout << "enabling color stream" << std::endl;
-  config->enableStream(colorProfile);
+//   auto colorProfiles = pipe.getStreamProfileList(OB_SENSOR_COLOR);
+//   std::shared_ptr<ob::VideoStreamProfile> colorProfile = nullptr;
+//   if (colorProfiles) {
+//     colorProfile = std::const_pointer_cast<ob::StreamProfile>(
+//                        colorProfiles->getProfile(OB_PROFILE_DEFAULT))
+//                        ->as<ob::VideoStreamProfile>();
+//   }
+//   std ::cout << "enabling color stream" << std::endl;
+//   config->enableStream(colorProfile);
 
-  // ensure depth and color are synchronized.
-  pipe.enableFrameSync();
+//   // ensure depth and color are synchronized.
+//   pipe.enableFrameSync();
 
-  // pipe.start(config);
-  pipe.start(config, frameCallback);
+//   // pipe.start(config);
+//   pipe.start(config, frameCallback);
 
-  auto intr = depthProfile->getIntrinsic();
-  std::cout << "depth instrinsics: " << std::endl;
-  std::cout << "  Width: " << intr.width << "\n";
-  std::cout << "  Height: " << intr.height << "\n";
-  std::cout << "  Fx: " << intr.fx << "\n";
-  std::cout << "  Fy: " << intr.fy << "\n";
-  std::cout << "  Cx: " << intr.cx << "\n";
-  std::cout << "  Cy: " << intr.cy << "\n";
-  std::cout << "\n\n";
+//   auto intr = depthProfile->getIntrinsic();
+//   std::cout << "depth instrinsics: " << std::endl;
+//   std::cout << "  Width: " << intr.width << "\n";
+//   std::cout << "  Height: " << intr.height << "\n";
+//   std::cout << "  Fx: " << intr.fx << "\n";
+//   std::cout << "  Fy: " << intr.fy << "\n";
+//   std::cout << "  Cx: " << intr.cx << "\n";
+//   std::cout << "  Cy: " << intr.cy << "\n";
+//   std::cout << "\n\n";
 
-  auto colorIntr = colorProfile->getIntrinsic();
-  std::cout << "color instrinsics: " << std::endl;
-  std::cout << "  Width: " << colorIntr.width << "\n";
-  std::cout << "  Height: " << colorIntr.height << "\n";
-  std::cout << "  Fx: " << colorIntr.fx << "\n";
-  std::cout << "  Fy: " << colorIntr.fy << "\n";
-  std::cout << "  Cx: " << colorIntr.cx << "\n";
-  std::cout << "  Cy: " << colorIntr.cy << "\n";
-  std::cout << "\n\n";
+//   auto colorIntr = colorProfile->getIntrinsic();
+//   std::cout << "color instrinsics: " << std::endl;
+//   std::cout << "  Width: " << colorIntr.width << "\n";
+//   std::cout << "  Height: " << colorIntr.height << "\n";
+//   std::cout << "  Fx: " << colorIntr.fx << "\n";
+//   std::cout << "  Fy: " << colorIntr.fy << "\n";
+//   std::cout << "  Cx: " << colorIntr.cx << "\n";
+//   std::cout << "  Cy: " << colorIntr.cy << "\n";
+//   std::cout << "\n\n";
 
-  while (true) {
-    // std::cout << "waiting for frames" << std::endl;
-    // std::this_thread::sleep_for(std::chrono::seconds(1));
-  }
+//   while (true) {
+//     // std::cout << "waiting for frames" << std::endl;
+//     // std::this_thread::sleep_for(std::chrono::seconds(1));
+//   }
 
-  // // // Discarding the first few frames since it takes a bit for them to
-  // initialize. for (int i = 0; i<5; i++) {
-  //     pipe.waitForFrames();
-  // }
+// // // Discarding the first few frames since it takes a bit for them to
+// initialize. for (int i = 0; i<5; i++) {
+//     pipe.waitForFrames();
+// }
 
-  // auto frames = pipe.waitForFrames();
-  // if(!frames) {
-  //     std::cerr << "couldnt get frames" << std::endl;
-  //     return -1;
-  // }
+// auto frames = pipe.waitForFrames();
+// if(!frames) {
+//     std::cerr << "couldnt get frames" << std::endl;
+//     return -1;
+// }
 
-  // auto alignFilter = std::make_shared<ob::Align>(OB_STREAM_COLOR); // Align
-  // depth frame to color frame auto alignedFrames =
-  // alignFilter->process(frames); std::cout << "got frames" <<  std::endl;
-  // std::cout << frames->getCount() << std::endl;
+// auto alignFilter = std::make_shared<ob::Align>(OB_STREAM_COLOR); // Align
+// depth frame to color frame auto alignedFrames =
+// alignFilter->process(frames); std::cout << "got frames" <<  std::endl;
+// std::cout << frames->getCount() << std::endl;
 
-  // auto colorFrame = frames->colorFrame();
-  // if(!colorFrame) {
-  //     std::cerr << "couldnt get color frame" << std::endl;
-  // }
+// auto colorFrame = frames->colorFrame();
+// if(!colorFrame) {
+//     std::cerr << "couldnt get color frame" << std::endl;
+// }
 
-  // auto depthFrame = frames-> depthFrame();
-  // if (!depthFrame) {
-  //     std::cerr << "cloudnt get depth frame" << std::endl;
-  // }
+// auto depthFrame = frames-> depthFrame();
+// if (!depthFrame) {
+//     std::cerr << "cloudnt get depth frame" << std::endl;
+// }
 
-  // pipe.stop();
+// pipe.stop();
 
-  // if (colorFrame) {
-  //         saveColor(colorFrame);
-  //     }
-  // if (depthFrame) {
-  //         saveDepth(depthFrame);
-  // }
+// if (colorFrame) {
+//         saveColor(colorFrame);
+//     }
+// if (depthFrame) {
+//         saveDepth(depthFrame);
+// }
 
-  // makePointCloud(alignedFrames);
-}
+// makePointCloud(alignedFrames);
+// }
+
+struct my_device {
+  std::shared_ptr<ob::Pipeline> pipe;
+  std::shared_ptr<const ob::FrameSet> frameSet;
+};
+
+std::mutex devices_by_serial_mu;
+std::map<std::string, std::shared_ptr<my_device>> devices_by_serial;
 
 void printDeviceList(const std::shared_ptr<ob::DeviceList> devList) {
   int devCount = devList->getCount();
@@ -313,37 +325,51 @@ void printDeviceInfo(const std::shared_ptr<ob::DeviceInfo> info) {
             << "  ASIC::             " << info->asicName() << "\n";
 }
 
+void startStreams(std::map<std::string, std::shared_ptr<ob::Pipeline>> &pipes) {
+  for (auto &item : pipes) {
+    auto serialNumber = item.first;
+    auto &pipe = item.second;
+
+    std::cout << "starting " << serialNumber << std::endl;
+    // config to enable depth and color streams
+    std::shared_ptr<ob::Config> config = std::make_shared<ob::Config>();
+    config->enableVideoStream(OB_STREAM_COLOR);
+    config->enableVideoStream(OB_STREAM_DEPTH);
+
+    std::shared_ptr<my_device> my_dev = std::make_shared<my_device>();
+    my_dev->pipe = pipe;
+
+    {
+      std::lock_guard<std::mutex> lock(devices_by_serial_mu);
+      devices_by_serial.insert({serialNumber, my_dev});
+    }
+
+    // start pipeline and pass the callback function to receive the frames
+    pipe->start(config, [serialNumber](std::shared_ptr<ob::FrameSet> frameSet) {
+      std::lock_guard<std::mutex> lock(devices_by_serial_mu);
+      auto my_dev = devices_by_serial[serialNumber];
+      my_dev->frameSet = frameSet;
+      devices_by_serial.insert({serialNumber, my_dev});
+    });
+  }
+}
+
+void stopStreams() {
+  std::vector<std::shared_ptr<ob::Pipeline>> pipes;
+  {
+    std::lock_guard<std::mutex> lock(devices_by_serial_mu);
+    for (auto &item : devices_by_serial) {
+      pipes.push_back(std::move(item.second->pipe));
+    }
+    devices_by_serial.clear();
+  }
+  for (auto &p : pipes) {
+    p->stop();
+  }
+}
+
 void listDevices(ob::Context &ctx) {
   try {
-    ctx.enableNetDeviceEnumeration(false);
-    ctx.setLoggerSeverity(OB_LOG_SEVERITY_DEBUG);
-    ctx.setDeviceChangedCallback(
-        [](std::shared_ptr<ob::DeviceList> removedList,
-           std::shared_ptr<ob::DeviceList> deviceList) {
-          try {
-            int devCount = removedList->getCount();
-            if (devCount > 0) {
-              std::cout << " Devices Removed:\n";
-              printDeviceList(removedList);
-            }
-
-            devCount = deviceList->getCount();
-            if (devCount > 0) {
-              std::cout << " Devices added:\n";
-              for (size_t i = 0; i < devCount; i++) {
-                auto dev = deviceList->getDevice(i);
-                auto info = dev->getDeviceInfo();
-                printDeviceInfo(info);
-              }
-            }
-          } catch (ob::Error &e) {
-            std::cerr << "setDeviceChangedCallback\n"
-                      << "function:" << e.getFunction()
-                      << "\nargs:" << e.getArgs() << "\nname:" << e.getName()
-                      << "\nmessage:" << e.what()
-                      << "\ntype:" << e.getExceptionType() << std::endl;
-          }
-        });
     auto devList = ctx.queryDeviceList();
     int devCount = devList->getCount();
     std::cout << "devCount: " << devCount << "\n";
@@ -351,19 +377,7 @@ void listDevices(ob::Context &ctx) {
       auto dev = devList->getDevice(i);
       auto info = dev->getDeviceInfo();
       printDeviceInfo(info);
-      auto deviceState = dev->getDeviceState();
-      if (deviceState) {
-        std::cout << "device state: " << deviceState << "\n";
-      }
-      dev->setDeviceStateChangedCallback(
-          [](OBDeviceState state, const char *message) {
-            std::cout << "DeviceStateChangedCallback:\n"
-                      << "state: " << state << "\n"
-                      << " message: " << message << "\n";
-          });
     }
-    std::cout << "waiting for key press\n";
-    std::cin.get();
   } catch (ob::Error &e) {
     std::cerr << "listDevices\n"
               << "function:" << e.getFunction() << "\nargs:" << e.getArgs()
@@ -377,7 +391,74 @@ int main() {
   std::cout << "starting orbbec program" << std::endl;
 
   ob::Context ctx;
+  ctx.enableNetDeviceEnumeration(false);
+  // ctx.setLoggerSeverity(OB_LOG_SEVERITY_DEBUG);
+
   listDevices(ctx);
 
+  ctx.setDeviceChangedCallback([](std::shared_ptr<ob::DeviceList> removedList,
+                                  std::shared_ptr<ob::DeviceList> deviceList) {
+    try {
+      int devCount = removedList->getCount();
+      if (devCount > 0) {
+        std::cout << " Devices Removed:\n";
+        printDeviceList(removedList);
+        for (size_t i = 0; i < devCount; i++) {
+          std::lock_guard<std::mutex> lock(devices_by_serial_mu);
+          auto serial_number = removedList->serialNumber(i);
+          auto &my_dev = devices_by_serial[serial_number];
+          if (my_dev == nullptr) {
+            std::cerr << serial_number
+                      << "was in removedList of device change callback but not "
+                         "in devices_by_serial\n";
+            continue;
+          }
+          // todo maybe you don't need this
+          // my_dev->pipe->stop();
+          devices_by_serial.erase(serial_number);
+        }
+      }
+
+      devCount = deviceList->getCount();
+      if (devCount > 0) {
+        std::map<std::string, std::shared_ptr<ob::Pipeline>> pipes;
+        std::cout << " Devices added:\n";
+        for (size_t i = 0; i < devCount; i++) {
+          auto dev = deviceList->getDevice(i);
+          auto info = dev->getDeviceInfo();
+          printDeviceInfo(info);
+          auto serialNumber = info->getSerialNumber();
+          auto pipe = std::make_shared<ob::Pipeline>(dev);
+          pipes.insert({serialNumber, pipe});
+        }
+        startStreams(pipes);
+      }
+    } catch (ob::Error &e) {
+      std::cerr << "setDeviceChangedCallback\n"
+                << "function:" << e.getFunction() << "\nargs:" << e.getArgs()
+                << "\nname:" << e.getName() << "\nmessage:" << e.what()
+                << "\ntype:" << e.getExceptionType() << std::endl;
+    }
+  });
+
+  std::map<std::string, std::shared_ptr<ob::Pipeline>> pipes;
+  auto devList = ctx.queryDeviceList();
+  int devCount = devList->getCount();
+  std::cout << "devCount: " << devCount << "\n";
+  for (size_t i = 0; i < devCount; i++) {
+    auto dev = devList->getDevice(i);
+    auto info = dev->getDeviceInfo();
+    auto pipe = std::make_shared<ob::Pipeline>(dev);
+    auto serialNumber = info->getSerialNumber();
+    pipes.insert({serialNumber, pipe});
+  }
+
+  startStreams(pipes);
+
+  std::cout << "NICK! waiting for key press\n";
+  std::cin.get();
+  std::cout << "stopping orbbec program" << std::endl;
+
+  stopStreams();
   return 0;
 }
