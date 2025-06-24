@@ -1,0 +1,20 @@
+{
+  "module_id": "viam:orbbec",
+  "build": {
+    "setup": "make setup",
+    "build": "make module.tar.gz",
+    "arch": [
+      "linux/amd64",
+    ]
+  },
+  "visibility": "public",
+  "url": "https://github.com/viam-modules/orbbec",
+  "description": "Camera orbbec models.",
+  "models": [
+    {
+      "api": "rdk:component:camera",
+      "model": "viam:orbbec:astra2"
+    }
+  ],
+  "entrypoint": "build-conan/build/RelWithDebInfo/tflite_cpu"
+}
