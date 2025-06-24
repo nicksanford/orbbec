@@ -1,299 +1,109 @@
 
-// #include <chrono>
 #include <cstdio>
+#include <fstream>
 #include <iostream>
 #include <libobsensor/ObSensor.hpp>
-#include <map>
+#include <math.h>
 #include <memory>
 #include <mutex>
 #include <ostream>
+#include <sstream>
 #include <vector>
-// #include <opencv2/opencv.hpp>
 
-// void saveColor(std::shared_ptr<ob::Frame> colorFrame) {
-//     std::vector<int> compression_params;
-//     compression_params.push_back(cv::IMWRITE_JPEG_QUALITY);
-//     compression_params.push_back(90);
-//     std::string colorName =
-//     "../Color/color_"+std::to_string(colorFrame->systemTimeStamp() ) +
-//     ".jpg"; cv::Mat colorRawMat(1, colorFrame->dataSize(), CV_8UC1,
-//     colorFrame->data()); cv::Mat colorMat = cv::imdecode(colorRawMat, 1);
-//     cv::imwrite(colorName, colorMat, compression_params);
-//     std::cout << "color saved" << std::endl;
-// }
+static const double min_distance = 1e-6;
+struct PointXYZRGB {
+  float x, y, z;
+  unsigned int rgb;
+};
 
-// void saveDepth(std::shared_ptr<ob::Frame> depthFrame) {
-//     std::vector<int> compression_params;
-//    // compression_params.push_back(cv::IMWRITE_JPEG_QUALITY);
-//     compression_params.push_back(cv::IMWRITE_PNG_COMPRESSION);
-//     compression_params.push_back(0);
-//     compression_params.push_back(cv::IMWRITE_PNG_STRATEGY);
-//     compression_params.push_back(cv::IMWRITE_PNG_STRATEGY_DEFAULT);
-//     //compression_params.push_back(90);
-//     // System time stamp should be the UNIX time in ms
-//     std::string depthName = "../Depth/Depth_" +
-//     std::to_string(depthFrame->systemTimeStamp()) + ".png"; auto videoFrame =
-//     std::dynamic_pointer_cast<ob::VideoFrame>(depthFrame); cv::Mat
-//     depthMat(videoFrame->height(), videoFrame->width(), CV_16UC1,
-//     depthFrame->data()); cv::imwrite(depthName, depthMat,
-//     compression_params); std::cout << "Depth saved" << std::endl;
-// }
+bool validPoint(OBColorPoint p) {
+  return fabs(p.x) >= min_distance || fabs(p.y) >= min_distance ||
+         fabs(p.z) >= min_distance;
+}
 
-// void saveRGBPointsToPCD(std::shared_ptr<ob::Frame> frame, std::string
-// fileName) {
-//     std::chrono::time_point<std::chrono::high_resolution_clock> start;
-//     start = std::chrono::high_resolution_clock::now();
+std::vector<unsigned char> RGBPointsToPCD(std::shared_ptr<ob::Frame> frame) {
+  int numPoints = frame->dataSize() / sizeof(OBColorPoint);
 
-//     int   pointsSize = frame->dataSize() / sizeof(OBColorPoint);
-//     FILE *fp         = fopen(fileName.c_str(), "wb+");
+  OBColorPoint *points = (OBColorPoint *)frame->data();
+  std::vector<PointXYZRGB> pcdPoints;
 
-//     if(!fp) {
-//         throw std::runtime_error("Failed to open file for writing");
-//     }
+  for (int i = 0; i < numPoints; i++) {
+    OBColorPoint &p = points[i];
+    if (validPoint(p)) {
+      unsigned int r = (unsigned int)p.r;
+      unsigned int g = (unsigned int)p.g;
+      unsigned int b = (unsigned int)p.b;
+      unsigned int rgb = (r << 16) | (g << 8) | b;
+      PointXYZRGB pt;
+      pt.x = p.x;
+      pt.y = p.y;
+      pt.z = p.z;
+      pt.rgb = rgb;
+      pcdPoints.push_back(pt);
+    }
+  }
 
-//     OBColorPoint    *points            = (OBColorPoint *)frame->data();
-//     int               validPointsCount = 0;
-//     static const auto min_distance     = 1e-6;
+  std::stringstream header;
+  header << "VERSION .7\n"
+         << "FIELDS x y z rgb\n"
+         << "SIZE 4 4 4 4\n"
+         << "TYPE F F F U\n"
+         << "COUNT 1 1 1 1\n"
+         << "WIDTH " << pcdPoints.size() << "\n" // Use valid points count
+         << "HEIGHT 1\n"
+         << "VIEWPOINT 0 0 0 1 0 0 0\n"
+         << "POINTS " << pcdPoints.size() << "\n"
+         << "DATA binary\n";
+  std::string headerStr = header.str();
+  std::vector<unsigned char> pcdBytes;
+  pcdBytes.insert(pcdBytes.end(), headerStr.begin(), headerStr.end());
+  for (auto &p : pcdPoints) {
+    unsigned char *x = (unsigned char *)&p.x;
+    unsigned char *y = (unsigned char *)&p.y;
+    unsigned char *z = (unsigned char *)&p.z;
+    unsigned char *rgb = (unsigned char *)&p.rgb;
 
-//     // First pass: Count valid points (non-zero points)
-//     for(int i = 0; i < pointsSize; i++) {
-//         if(fabs(points[i].x) >= min_distance || fabs(points[i].y) >=
-//         min_distance || fabs(points[i].z) >= min_distance) {
-//             validPointsCount++;
-//         }
-//     }
+    pcdBytes.push_back(x[0]);
+    pcdBytes.push_back(x[1]);
+    pcdBytes.push_back(x[2]);
+    pcdBytes.push_back(x[3]);
 
-//     fprintf(fp, "VERSION .7\n");
-//     fprintf(fp, "FIELDS x y z rgb\n");
-//     fprintf(fp, "SIZE 4 4 4 4\n");
-//     fprintf(fp, "TYPE F F F F\n");
-//     fprintf(fp, "COUNT 1 1 1 1\n");
-//     fprintf(fp, "WIDTH %d\n", validPointsCount);  // Use valid points count
-//     fprintf(fp, "HEIGHT 1\n");
-//     fprintf(fp, "VIEWPOINT 0 0 0 1 0 0 0\n");
-//     fprintf(fp, "POINTS %d\n", validPointsCount);
-//     fprintf(fp, "DATA binary\n");
+    pcdBytes.push_back(y[0]);
+    pcdBytes.push_back(y[1]);
+    pcdBytes.push_back(y[2]);
+    pcdBytes.push_back(y[3]);
 
-//     struct PointXYZRGB {
-//         float x, y, z;
-//         float rgb;
-//     };
+    pcdBytes.push_back(z[0]);
+    pcdBytes.push_back(z[1]);
+    pcdBytes.push_back(z[2]);
+    pcdBytes.push_back(z[3]);
 
-//     std::vector<PointXYZRGB> pcdPoints;
-//     pcdPoints.reserve(validPointsCount);
+    pcdBytes.push_back(rgb[0]);
+    pcdBytes.push_back(rgb[1]);
+    pcdBytes.push_back(rgb[2]);
+    pcdBytes.push_back(rgb[3]);
+  }
 
-//     for (int i = 0; i < pointsSize; i++) {
-//         OBColorPoint& p = points[i];
-//         if(fabs(p.x) >= min_distance || fabs(p.y) >= min_distance ||
-//         fabs(p.z) >= min_distance) {
-//             unsigned int r = (unsigned int)p.r;
-//             unsigned int g = (unsigned int)p.g;
-//             unsigned int b = (unsigned int)p.b;
-//             unsigned int rgb_int = (r << 16) | (g << 8) |b;
-//             float rgb_float;
-//             memcpy(&rgb_float, &rgb_int, sizeof(float));
-//             PointXYZRGB pt;
-//             pt.x = p.x;
-//             pt.y = p.y;
-//             pt.z = p.z;
-//             std::memcpy(&pt.rgb, &rgb_float, sizeof(float));
-//             pcdPoints.push_back(pt);
-//         }
-//     }
-
-//     fwrite(pcdPoints.data(), sizeof(PointXYZRGB), validPointsCount, fp);
-
-//     auto stop = std::chrono::high_resolution_clock::now();
-//     auto duration =
-//     std::chrono::duration_cast<std::chrono::milliseconds>(stop-start);
-//     std::cout << "duration: " << duration.count() << "ms" << std::endl;
-
-//     fflush(fp);
-//     fclose(fp);
-
-// }
-
-// void makePointCloud(std::shared_ptr<ob::Frame> frames) {
-//     auto pointcloud = std::make_shared<ob::PointCloudFilter>();
-//     pointcloud->setCreatePointFormat(OB_FORMAT_RGB_POINT);
-//     std::shared_ptr<ob::Frame> frame = pointcloud->process(frames);
-//     std::string pcdName = "pcd_" + std::to_string(frame->timeStamp()) +
-//     ".pcd"; saveRGBPointsToPCD(frame, pcdName);
-// }
-
-// void frameCallback(std::shared_ptr<ob::FrameSet> frameset) {
-// if (!frameset) {
-//     std::cerr << "no frames" << std::endl;
-//     return;
-// }
-
-// auto color = frameset->colorFrame();
-// auto depth = frameset->depthFrame();
-
-// auto alignFilter = std::make_shared<ob::Align>(OB_STREAM_COLOR); // Align
-// depth frame to color frame auto alignedFrames =
-// alignFilter->process(frameset); std::cout << "got frames" <<  std::endl;
-// std::cout << frameset->getCount() << std::endl;
-
-// auto colorFrame = frameset->colorFrame();
-// if(!colorFrame) {
-//     std::cerr << "couldnt get color frame" << std::endl;
-// }
-
-// auto depthFrame = frameset-> depthFrame();
-// if (!depthFrame) {
-//     std::cerr << "couldnt get depth frame" << std::endl;
-// }
-
-//  // Run this in the background so we dont miss frames
-// std::thread([=]() {
-//     if (colorFrame) saveColor(colorFrame);
-//     if (depthFrame) saveDepth(depthFrame);
-// }).detach();
-// }
-
-// void deviceChangedCallback(std::shared_ptr<DeviceList> added,
-// std::shared_ptr<DeviceList> removed) {
-//     // device(s) have been connecxted
-//     if (added && added->deviceCount() > 0) {
-//         std::cout << "new device has been connected:\n";
-//         for (uint32_t i = 0; i < added->deviceCount(); ++i) {
-//             auto devInfo = added->getDevice(i)->getDeviceInfo();
-//             std::cout << " Serial number: " << devInfo->getSerialNumber() <<
-//             std::endl;
-//         }
-//     }
-
-//     if (removed && removed->deviceCount() > 0) {
-//         std::cout << "Device(s) disconnected:\n";
-//         for (uint32_t i = 0; i < removed->deviceCount(); ++i) {
-//             auto devInfo = removed->getDevice(i)->getDeviceInfo();
-//             std::cout << "  - Serial: " << devInfo->getSerialNumber() <<
-//             std::endl;
-//         }
-//     }
-// }
-//
-// void prev(const ob::Context &context) {
-//   ob::Pipeline pipe;
-//   auto deviceList = context.queryDeviceList();
-//   int deviceCount = deviceList->deviceCount();
-//   std::cout << "Found " << deviceCount << " devices." << std::endl;
-//   for (int i = 0; i < deviceCount; ++i) {
-//     auto device = deviceList->getDevice(i);
-//     auto info = device->getDeviceInfo();
-
-//     std::string serial = info->getSerialNumber();
-//     std::string name = info->getName();
-//     std::string uid = info->getUid();
-
-//     std::cout << "Device " << i + 1 << ":\n"
-//               << "  Name:   " << name << "\n"
-//               << "  Serial Number: " << serial << "\n"
-//               << "  UID:    " << uid << "\n";
-//   }
-
-//   // context.setDeviceChangedCallback(deviceChangedCallback);
-
-//   std::shared_ptr<ob::Config> config = std::make_shared<ob::Config>();
-//   auto depthProfiles = pipe.getStreamProfileList(OB_SENSOR_DEPTH);
-//   std::shared_ptr<ob::VideoStreamProfile> depthProfile = nullptr;
-//   if (depthProfiles) {
-//     depthProfile = std::const_pointer_cast<ob::StreamProfile>(
-//                        depthProfiles->getProfile(OB_PROFILE_DEFAULT))
-//                        ->as<ob::VideoStreamProfile>();
-//   }
-
-//   std ::cout << "enabling depth stream" << std::endl;
-//   config->enableStream(depthProfile);
-
-//   auto colorProfiles = pipe.getStreamProfileList(OB_SENSOR_COLOR);
-//   std::shared_ptr<ob::VideoStreamProfile> colorProfile = nullptr;
-//   if (colorProfiles) {
-//     colorProfile = std::const_pointer_cast<ob::StreamProfile>(
-//                        colorProfiles->getProfile(OB_PROFILE_DEFAULT))
-//                        ->as<ob::VideoStreamProfile>();
-//   }
-//   std ::cout << "enabling color stream" << std::endl;
-//   config->enableStream(colorProfile);
-
-//   // ensure depth and color are synchronized.
-//   pipe.enableFrameSync();
-
-//   // pipe.start(config);
-//   pipe.start(config, frameCallback);
-
-//   auto intr = depthProfile->getIntrinsic();
-//   std::cout << "depth instrinsics: " << std::endl;
-//   std::cout << "  Width: " << intr.width << "\n";
-//   std::cout << "  Height: " << intr.height << "\n";
-//   std::cout << "  Fx: " << intr.fx << "\n";
-//   std::cout << "  Fy: " << intr.fy << "\n";
-//   std::cout << "  Cx: " << intr.cx << "\n";
-//   std::cout << "  Cy: " << intr.cy << "\n";
-//   std::cout << "\n\n";
-
-//   auto colorIntr = colorProfile->getIntrinsic();
-//   std::cout << "color instrinsics: " << std::endl;
-//   std::cout << "  Width: " << colorIntr.width << "\n";
-//   std::cout << "  Height: " << colorIntr.height << "\n";
-//   std::cout << "  Fx: " << colorIntr.fx << "\n";
-//   std::cout << "  Fy: " << colorIntr.fy << "\n";
-//   std::cout << "  Cx: " << colorIntr.cx << "\n";
-//   std::cout << "  Cy: " << colorIntr.cy << "\n";
-//   std::cout << "\n\n";
-
-//   while (true) {
-//     // std::cout << "waiting for frames" << std::endl;
-//     // std::this_thread::sleep_for(std::chrono::seconds(1));
-//   }
-
-// // // Discarding the first few frames since it takes a bit for them to
-// initialize. for (int i = 0; i<5; i++) {
-//     pipe.waitForFrames();
-// }
-
-// auto frames = pipe.waitForFrames();
-// if(!frames) {
-//     std::cerr << "couldnt get frames" << std::endl;
-//     return -1;
-// }
-
-// auto alignFilter = std::make_shared<ob::Align>(OB_STREAM_COLOR); // Align
-// depth frame to color frame auto alignedFrames =
-// alignFilter->process(frames); std::cout << "got frames" <<  std::endl;
-// std::cout << frames->getCount() << std::endl;
-
-// auto colorFrame = frames->colorFrame();
-// if(!colorFrame) {
-//     std::cerr << "couldnt get color frame" << std::endl;
-// }
-
-// auto depthFrame = frames-> depthFrame();
-// if (!depthFrame) {
-//     std::cerr << "cloudnt get depth frame" << std::endl;
-// }
-
-// pipe.stop();
-
-// if (colorFrame) {
-//         saveColor(colorFrame);
-//     }
-// if (depthFrame) {
-//         saveDepth(depthFrame);
-// }
-
-// makePointCloud(alignedFrames);
-// }
+  std::cout << "pointcloud size: " << pcdPoints.size() << "\n";
+  return pcdBytes;
+}
 
 struct my_device {
+  ~my_device() { std::cout << "deleting device\n"; }
+  std::string serial_number;
   std::shared_ptr<ob::Device> device;
   std::shared_ptr<ob::Pipeline> pipe;
-  std::shared_ptr<ob::FrameSet> frameSet;
+  std::shared_ptr<ob::PointCloudFilter> pointCloudFilter;
+  std::shared_ptr<ob::Align> align;
+  OBCameraParam param;
 };
 
 std::mutex devices_by_serial_mu;
-std::map<std::string, std::shared_ptr<my_device>> devices_by_serial;
+std::unordered_map<std::string, std::unique_ptr<my_device>> devices_by_serial;
+
+std::mutex frame_set_by_serial_mu;
+std::unordered_map<std::string, std::shared_ptr<ob::FrameSet>>
+    frame_set_by_serial;
 
 void printDeviceList(const std::shared_ptr<ob::DeviceList> devList) {
   int devCount = devList->getCount();
@@ -326,75 +136,179 @@ void printDeviceInfo(const std::shared_ptr<ob::DeviceInfo> info) {
             << "  ASIC::             " << info->asicName() << "\n";
 }
 
-void startStreams(std::map<std::string, std::shared_ptr<ob::Device>> &devs) {
-  for (auto &item : devs) {
-    auto serialNumber = item.first;
-    auto &dev = item.second;
+// check if the given stream profiles support hardware depth-to-color
+// alignment
+bool checkIfSupportHWD2CAlign(
+    std::shared_ptr<ob::Pipeline> pipe,
+    std::shared_ptr<ob::StreamProfile> colorStreamProfile,
+    std::shared_ptr<ob::StreamProfile> depthStreamProfile) {
+  auto hwD2CSupportedDepthStreamProfiles =
+      pipe->getD2CDepthProfileList(colorStreamProfile, ALIGN_D2C_HW_MODE);
+  if (hwD2CSupportedDepthStreamProfiles->count() == 0) {
+    return false;
+  }
 
-    std::cout << "starting " << serialNumber << std::endl;
-    // config to enable depth and color streams
-    std::shared_ptr<ob::Config> config = std::make_shared<ob::Config>();
-    config->enableVideoStream(OB_STREAM_COLOR);
-    config->enableVideoStream(OB_STREAM_DEPTH);
-    auto spl = config->getEnabledStreamProfileList();
-    int count = spl->getCount();
-    std::vector<std::shared_ptr<ob::VideoStreamProfile>> colorProfiles;
-    std::vector<std::shared_ptr<ob::VideoStreamProfile>> depthProfiles;
-    std::shared_ptr<ob::StreamProfile> profile = nullptr;
-    for (size_t i = 0; i < count; i++) {
-      profile = spl->getProfile(i);
-      switch (profile->getType()) {
-      case OB_STREAM_COLOR:
-        colorProfiles.push_back(profile->as<ob::VideoStreamProfile>());
-        break;
-      case OB_STREAM_DEPTH:
-        depthProfiles.push_back(profile->as<ob::VideoStreamProfile>());
-        break;
-      default:
+  // Iterate through the supported depth stream profiles and check if there is
+  // a match with the given depth stream profile
+  auto depthVsp = depthStreamProfile->as<ob::VideoStreamProfile>();
+  auto count = hwD2CSupportedDepthStreamProfiles->getCount();
+  for (uint32_t i = 0; i < count; i++) {
+    auto sp = hwD2CSupportedDepthStreamProfiles->getProfile(i);
+    auto vsp = sp->as<ob::VideoStreamProfile>();
+    if (vsp->getWidth() == depthVsp->getWidth() &&
+        vsp->getHeight() == depthVsp->getHeight() &&
+        vsp->getFormat() == depthVsp->getFormat() &&
+        vsp->getFps() == depthVsp->getFps()) {
+      std::cout << "using width: " << vsp->getWidth()
+                << " height: " << vsp->getHeight()
+                << " format: " << vsp->getFormat() << " fps: " << vsp->getFps()
+                << "\n";
+      // Found a matching depth stream profile, it is means the given stream
+      // profiles support hardware depth-to-color alignment
+      return true;
+    }
+  }
+  return false;
+}
+
+// create a config for hardware depth-to-color alignment
+std::shared_ptr<ob::Config>
+createHwD2CAlignConfig(std::shared_ptr<ob::Pipeline> pipe) {
+  auto coloStreamProfiles = pipe->getStreamProfileList(OB_SENSOR_COLOR);
+  auto depthStreamProfiles = pipe->getStreamProfileList(OB_SENSOR_DEPTH);
+
+  // Iterate through all color and depth stream profiles to find a match for
+  // hardware depth-to-color alignment
+  auto colorSpCount = coloStreamProfiles->getCount();
+  auto depthSpCount = depthStreamProfiles->getCount();
+  for (uint32_t i = 0; i < colorSpCount; i++) {
+    auto colorProfile = coloStreamProfiles->getProfile(i);
+    auto colorVsp = colorProfile->as<ob::VideoStreamProfile>();
+    for (uint32_t j = 0; j < depthSpCount; j++) {
+      auto depthProfile = depthStreamProfiles->getProfile(j);
+      auto depthVsp = depthProfile->as<ob::VideoStreamProfile>();
+
+      // make sure the color and depth stream have the same fps, due to some
+      // models may not support different fps
+      if (colorVsp->getFps() != depthVsp->getFps()) {
         continue;
       }
-    }
-    // TODO: sort to find best stream profiles with same resolution and fps
 
-    std::shared_ptr<my_device> my_dev = std::make_shared<my_device>();
-    auto pipe = std::make_shared<ob::Pipeline>(dev);
+      // Check if the given stream profiles support hardware depth-to-color
+      // alignment
+      if (checkIfSupportHWD2CAlign(pipe, colorProfile, depthProfile)) {
+        // If support, create a config for hardware depth-to-color alignment
+        auto hwD2CAlignConfig = std::make_shared<ob::Config>();
+        hwD2CAlignConfig->enableStream(colorProfile); // enable color stream
+        hwD2CAlignConfig->enableStream(depthProfile); // enable depth stream
+        hwD2CAlignConfig->setAlignMode(
+            ALIGN_D2C_HW_MODE); // enable hardware depth-to-color alignment
+        hwD2CAlignConfig->setFrameAggregateOutputMode(
+            OB_FRAME_AGGREGATE_OUTPUT_ALL_TYPE_FRAME_REQUIRE); // output
+                                                               // frameset
+                                                               // with all
+                                                               // types of
+                                                               // frames
+        return hwD2CAlignConfig;
+      }
+    }
+  }
+  return nullptr;
+}
+
+void startStream(std::string serialNumber, std::shared_ptr<ob::Device> dev) {
+  std::cout << "starting " << serialNumber << std::endl;
+  std::shared_ptr<ob::Pipeline> pipe = std::make_shared<ob::Pipeline>(dev);
+  pipe->enableFrameSync();
+  auto config = createHwD2CAlignConfig(pipe);
+  if (config == nullptr) {
+    std::cerr << "Current device does not support hardware depth-to-color "
+                 "alignment."
+              << std::endl;
+    return;
+  }
+
+  // TODO: sort to find best stream profiles with same resolution and fps
+  std::shared_ptr<ob::PointCloudFilter> pointCloudFilter =
+      std::make_shared<ob::PointCloudFilter>();
+  // NOTE: Swap this to depth if you want to align to depth
+  std::shared_ptr<ob::Align> align =
+      std::make_shared<ob::Align>(OB_STREAM_COLOR);
+
+  pointCloudFilter->setCreatePointFormat(OB_FORMAT_RGB_POINT);
+
+  {
+    std::lock_guard<std::mutex> lock(devices_by_serial_mu);
+    std::unique_ptr<my_device> my_dev = std::make_unique<my_device>();
+
     my_dev->pipe = pipe;
     my_dev->device = dev;
-
-    {
-      std::lock_guard<std::mutex> lock(devices_by_serial_mu);
-      devices_by_serial.insert({serialNumber, my_dev});
-    }
+    my_dev->serial_number = serialNumber;
+    my_dev->serial_number = serialNumber;
+    my_dev->pointCloudFilter = pointCloudFilter;
+    my_dev->align = align;
 
     // start pipeline and pass the callback function to receive the frames
-    pipe->start(config, [serialNumber](std::shared_ptr<ob::FrameSet> frameSet) {
-      if (frameSet == nullptr) {
+    // HACK
+    pipe->start(config, [serialNumber, align, pointCloudFilter](
+                            std::shared_ptr<ob::FrameSet> frameSet) {
+      if (frameSet->getCount() != 2) {
+        std::cerr << "got non 2 frame count: " << frameSet->getCount() << "\n";
         return;
       }
-      std::lock_guard<std::mutex> lock(devices_by_serial_mu);
-      auto my_dev = devices_by_serial[serialNumber];
-      my_dev->frameSet = frameSet;
+      std::shared_ptr<ob::Frame> color = frameSet->getFrame(OB_FRAME_COLOR);
+      if (color == nullptr) {
+        std::cerr << "no color frame\n" << frameSet->getCount() << "\n";
+        return;
+      }
 
-      // devices_by_serial.insert({serialNumber, my_dev});
+      // void *colorData = color->getData();
+      // uint32_t colorDataSize = color->dataSize();
+      // std::ofstream colorOutFile("color.jpeg",
+      //                            std::ios::out | std::ios::binary);
+      // colorOutFile.write(reinterpret_cast<const char *>(colorData),
+      //                    colorDataSize);
+      // colorOutFile.close();
+
+      std::shared_ptr<ob::Frame> depth = frameSet->getFrame(OB_FRAME_DEPTH);
+      if (depth == nullptr) {
+        std::cerr << "no depth frame\n";
+        return;
+      }
+
+      // void *depthData = depth->getData();
+      // uint32_t depthDataSize = depth->dataSize();
+      // std::ofstream depthOutFile("depth.y16", std::ios::out |
+      // std::ios::binary); depthOutFile.write(reinterpret_cast<const char
+      // *>(depthData),
+      //                    depthDataSize);
+      // depthOutFile.close();
+
+      std::vector<unsigned char> data =
+          RGBPointsToPCD(pointCloudFilter->process(align->process(frameSet)));
+      std::ofstream outfile("my.pcd", std::ios::out | std::ios::binary);
+      outfile.write((const char *)&data[0], data.size());
+      outfile.close();
+
+      std::lock_guard<std::mutex> lock(frame_set_by_serial_mu);
+      frame_set_by_serial[serialNumber] = frameSet;
     });
+    OBCameraParam param = pipe->getCameraParam();
+    devices_by_serial[serialNumber] = std::move(my_dev);
   }
 }
 
 void stopStreams() {
   std::vector<std::shared_ptr<ob::Pipeline>> pipes;
-  {
-    std::lock_guard<std::mutex> lock(devices_by_serial_mu);
-    for (auto &item : devices_by_serial) {
-      pipes.push_back(std::move(item.second->pipe));
-    }
-    devices_by_serial.clear();
+  std::lock_guard<std::mutex> lock(devices_by_serial_mu);
+  for (auto &[key, my_device] : devices_by_serial) {
+    std::cout << "stop stream " << key << "\n";
+    my_device->pipe->stop();
   }
-  for (auto &p : pipes) {
-    p->stop();
-  }
+  devices_by_serial.clear();
 }
 
-void listDevices(ob::Context &ctx) {
+void listDevices(const ob::Context &ctx) {
   try {
     auto devList = ctx.queryDeviceList();
     int devCount = devList->getCount();
@@ -421,70 +335,63 @@ int main() {
   std::cout << "starting orbbec program" << std::endl;
 
   ob::Context ctx;
-  ctx.enableNetDeviceEnumeration(false);
   // ctx.setLoggerSeverity(OB_LOG_SEVERITY_DEBUG);
 
-  listDevices(ctx);
+  // listDevices(ctx);
 
-  ctx.setDeviceChangedCallback([](std::shared_ptr<ob::DeviceList> removedList,
-                                  std::shared_ptr<ob::DeviceList> deviceList) {
-    try {
-      int devCount = removedList->getCount();
-      if (devCount > 0) {
-        std::cout << " Devices Removed:\n";
-        printDeviceList(removedList);
-        for (size_t i = 0; i < devCount; i++) {
-          std::lock_guard<std::mutex> lock(devices_by_serial_mu);
-          auto serial_number = removedList->serialNumber(i);
-          auto &my_dev = devices_by_serial[serial_number];
-          if (my_dev == nullptr) {
-            std::cerr << serial_number
-                      << "was in removedList of device change callback but not "
-                         "in devices_by_serial\n";
-            continue;
+  ctx.setDeviceChangedCallback(
+      [](const std::shared_ptr<ob::DeviceList> removedList,
+         const std::shared_ptr<ob::DeviceList> deviceList) {
+        try {
+          int devCount = removedList->getCount();
+          printDeviceList(removedList);
+          for (size_t i = 0; i < devCount; i++) {
+            if (i == 0) {
+              std::cout << " Devices Removed:\n";
+            }
+            std::lock_guard<std::mutex> lock(devices_by_serial_mu);
+            std::string serial_number = removedList->serialNumber(i);
+            if (auto search = devices_by_serial.find(serial_number);
+                search == devices_by_serial.end()) {
+              std::cerr
+                  << serial_number
+                  << "was in removedList of device change callback but not "
+                     "in devices_by_serial\n";
+              continue;
+            }
+            devices_by_serial.erase(serial_number);
           }
-          // todo maybe you don't need this
-          my_dev->device.reset();
-          my_dev->pipe.reset();
-          devices_by_serial.erase(serial_number);
-        }
-      }
 
-      devCount = deviceList->getCount();
-      if (devCount > 0) {
-        std::shared_ptr<ob::Device> dev = nullptr;
-        std::shared_ptr<ob::DeviceInfo> info = nullptr;
-        std::map<std::string, std::shared_ptr<ob::Device>> devs;
-        std::cout << " Devices added:\n";
-        for (size_t i = 0; i < devCount; i++) {
-          dev = deviceList->getDevice(i);
-          info = dev->getDeviceInfo();
-          printDeviceInfo(info);
-          devs.insert({info->getSerialNumber(), dev});
+          devCount = deviceList->getCount();
+          for (size_t i = 0; i < devCount; i++) {
+            if (i == 0) {
+              std::cout << " Devices added:\n";
+            }
+            std::shared_ptr<ob::Device> dev = deviceList->getDevice(i);
+            std::shared_ptr<ob::DeviceInfo> info = dev->getDeviceInfo();
+            printDeviceInfo(info);
+            startStream(info->getSerialNumber(), dev);
+          }
+        } catch (ob::Error &e) {
+          std::cerr << "setDeviceChangedCallback\n"
+                    << "function:" << e.getFunction()
+                    << "\nargs:" << e.getArgs() << "\nname:" << e.getName()
+                    << "\nmessage:" << e.what()
+                    << "\ntype:" << e.getExceptionType() << std::endl;
         }
-        startStreams(devs);
-      }
-    } catch (ob::Error &e) {
-      std::cerr << "setDeviceChangedCallback\n"
-                << "function:" << e.getFunction() << "\nargs:" << e.getArgs()
-                << "\nname:" << e.getName() << "\nmessage:" << e.what()
-                << "\ntype:" << e.getExceptionType() << std::endl;
-    }
-  });
+      });
 
-  std::map<std::string, std::shared_ptr<ob::Device>> devs;
-  auto devList = ctx.queryDeviceList();
+  std::shared_ptr<ob::DeviceList> devList = ctx.queryDeviceList();
   int devCount = devList->getCount();
-  std::shared_ptr<ob::Device> dev = nullptr;
-  std::shared_ptr<ob::DeviceInfo> info = nullptr;
-  std::cout << "devCount: " << devCount << "\n";
   for (size_t i = 0; i < devCount; i++) {
-    dev = devList->getDevice(i);
-    info = dev->getDeviceInfo();
-    devs.insert({info->getSerialNumber(), dev});
+    if (i == 0) {
+      std::cout << "devCount: " << devCount << "\n";
+    }
+    std::shared_ptr<ob::Device> dev = devList->getDevice(i);
+    std::shared_ptr<ob::DeviceInfo> info = dev->getDeviceInfo();
+    printDeviceInfo(info);
+    startStream(info->getSerialNumber(), dev);
   }
-
-  startStreams(devs);
 
   std::cout << "NICK! waiting for key press\n";
   std::cin.get();
