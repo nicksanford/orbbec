@@ -12,8 +12,8 @@ project(tflite_cpu
 
 set(BUILD_SHARED_LIBS OFF)
 
-add_executable(orbbec src/cli/main.cpp)
-# add_executable(orbbec src/module/main.cpp)
+# add_executable(orbbec-cli src/cli/main.cpp)
+add_executable(orbbec-module src/module/main.cpp)
 
 set(OrbbecSDK_DIR lib/orbbecsdk/lib)
 include_directories(include)
@@ -21,10 +21,15 @@ find_package(OrbbecSDK REQUIRED
     PATHS lib/
     NO_DEFAULT_PATH)
 find_package(viam-cpp-sdk REQUIRED)
+find_package(Threads REQUIRED)
 
-# find_package(OpenCV REQUIRED)
-# target_link_libraries(orbbec ob::OrbbecSDK ${OpenCV_LIBS})
-target_link_libraries(orbbec 
+# target_link_libraries(orbbec-cli
+# PRIVATE ob::OrbbecSDK
+# )
+
+target_link_libraries(orbbec-module
 PRIVATE ob::OrbbecSDK
+PRIVATE Threads::Threads
 PRIVATE viam-cpp-sdk::viamsdk
 )
+
