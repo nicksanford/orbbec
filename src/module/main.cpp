@@ -43,16 +43,10 @@ namespace {
 namespace vsdk = ::viam::sdk;
 
 constexpr char service_name[] = "viam_orbbec";
-static const double min_distance = 1e-6;
 struct PointXYZRGB {
   float x, y, z;
   unsigned int rgb;
 };
-
-bool validPoint(OBColorPoint p) {
-  return fabs(p.x) >= min_distance || fabs(p.y) >= min_distance ||
-         fabs(p.z) >= min_distance;
-}
 
 const float mmToMeterMultiple = 0.001;
 std::vector<unsigned char> RGBPointsToPCD(std::shared_ptr<ob::Frame> frame,
@@ -64,18 +58,16 @@ std::vector<unsigned char> RGBPointsToPCD(std::shared_ptr<ob::Frame> frame,
 
   for (int i = 0; i < numPoints; i++) {
     OBColorPoint &p = points[i];
-    if (validPoint(p)) {
-      unsigned int r = (unsigned int)(p.r);
-      unsigned int g = (unsigned int)p.g;
-      unsigned int b = (unsigned int)p.b;
-      unsigned int rgb = (r << 16) | (g << 8) | b;
-      PointXYZRGB pt;
-      pt.x = (p.x * scale);
-      pt.y = (p.y * scale);
-      pt.z = (p.z * scale);
-      pt.rgb = rgb;
-      pcdPoints.push_back(pt);
-    }
+    unsigned int r = (unsigned int)(p.r);
+    unsigned int g = (unsigned int)p.g;
+    unsigned int b = (unsigned int)p.b;
+    unsigned int rgb = (r << 16) | (g << 8) | b;
+    PointXYZRGB pt;
+    pt.x = (p.x * scale);
+    pt.y = (p.y * scale);
+    pt.z = (p.z * scale);
+    pt.rgb = rgb;
+    pcdPoints.push_back(pt);
   }
 
   std::stringstream header;
@@ -538,6 +530,10 @@ public:
               reinterpret_cast<const uint16_t *>(data) + height * width,
               m.begin());
 
+    for (size_t i = 0; i < m.size(); i++) {
+      m[i] = m[i] * mmToMeterMultiple;
+    }
+
     std::vector<unsigned char> encodedData =
         viam::sdk::Camera::encode_depth_map(m);
 
@@ -601,12 +597,12 @@ public:
     response.images.emplace_back(std::move(color_image));
     response.images.emplace_back(std::move(depth_image));
 
-    uint64_t colorTS = color->getTimeStampUs();
-    uint64_t depthTS = depth->getTimeStampUs();
+    uint64_t colorTS = color->getSystemTimeStampUs();
+    uint64_t depthTS = depth->getSystemTimeStampUs();
     if (colorTS != depthTS) {
-      VIAM_SDK_LOG(debug) << "color and depth timestamps differ, defaulting to "
+      VIAM_SDK_LOG(info) << "color and depth timestamps differ, defaulting to "
                              "color";
-      VIAM_SDK_LOG(debug) << "color timestamp was " << colorTS
+      VIAM_SDK_LOG(info) << "color timestamp was " << colorTS
                           << "depth timestamp was " << depthTS;
     }
     uint64_t timestamp = colorTS == 0 ? depthTS : colorTS;
