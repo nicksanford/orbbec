@@ -54,7 +54,9 @@ bool validPoint(OBColorPoint p) {
          fabs(p.z) >= min_distance;
 }
 
-std::vector<unsigned char> RGBPointsToPCD(std::shared_ptr<ob::Frame> frame) {
+const float mmToMeterMultiple = 0.001;
+std::vector<unsigned char> RGBPointsToPCD(std::shared_ptr<ob::Frame> frame,
+                                          float scale) {
   int numPoints = frame->dataSize() / sizeof(OBColorPoint);
 
   OBColorPoint *points = (OBColorPoint *)frame->data();
@@ -63,14 +65,14 @@ std::vector<unsigned char> RGBPointsToPCD(std::shared_ptr<ob::Frame> frame) {
   for (int i = 0; i < numPoints; i++) {
     OBColorPoint &p = points[i];
     if (validPoint(p)) {
-      unsigned int r = (unsigned int)p.r;
+      unsigned int r = (unsigned int)(p.r);
       unsigned int g = (unsigned int)p.g;
       unsigned int b = (unsigned int)p.b;
       unsigned int rgb = (r << 16) | (g << 8) | b;
       PointXYZRGB pt;
-      pt.x = p.x;
-      pt.y = p.y;
-      pt.z = p.z;
+      pt.x = (p.x * scale);
+      pt.y = (p.y * scale);
+      pt.z = (p.z * scale);
       pt.rgb = rgb;
       pcdPoints.push_back(pt);
     }
@@ -289,7 +291,6 @@ void startDevice(std::string serialNumber) {
 
     std::lock_guard<std::mutex> lock(frame_set_by_serial_mu);
     frame_set_by_serial[serialNumber] = frameSet;
-    VIAM_SDK_LOG(info) << service_name << ": set frame" << serialNumber;
   };
 
   my_dev->pipe->start(my_dev->config, std::move(frameCallback));
@@ -394,18 +395,20 @@ public:
   Orbbec(vsdk::Dependencies deps, vsdk::ResourceConfig cfg)
       : Camera(cfg.name()),
         state_(configure_(std::move(deps), std::move(cfg))) {
-    VIAM_SDK_LOG(info) << "Orbbec constructor " << state_->serial_number;
+    VIAM_SDK_LOG(info) << "Orbbec constructor start " << state_->serial_number;
     startDevice(state_->serial_number);
+    VIAM_SDK_LOG(info) << "Orbbec constructor end " << state_->serial_number;
   }
 
   ~Orbbec() {
-    VIAM_SDK_LOG(info) << "Orbbec destructor " << state_->serial_number;
+    VIAM_SDK_LOG(info) << "Orbbec destructor start " << state_->serial_number;
     std::string prev_serial_number;
     {
       const std::lock_guard<std::mutex> lock(state_mu_);
       prev_serial_number = state_->serial_number;
     }
     stopDevice(prev_serial_number);
+    VIAM_SDK_LOG(info) << "Orbbec destructor end " << state_->serial_number;
   }
 
   void reconfigure(const vsdk::Dependencies &deps,
@@ -648,6 +651,8 @@ public:
     if (depth == nullptr) {
       throw std::invalid_argument("no depth frame");
     }
+    std::shared_ptr<ob::DepthFrame> depthFrame = depth->as<ob::DepthFrame>();
+    float scale = depthFrame->getValueScale();
 
     unsigned char *depthData = (unsigned char *)depth->getData();
 
@@ -664,7 +669,8 @@ public:
     }
 
     std::vector<unsigned char> data = RGBPointsToPCD(
-        my_dev->pointCloudFilter->process(my_dev->align->process(fs)));
+        my_dev->pointCloudFilter->process(my_dev->align->process(fs)),
+        scale * mmToMeterMultiple);
 
     return vsdk::Camera::point_cloud{pointcloudMime, data};
   }
