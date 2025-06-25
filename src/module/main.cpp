@@ -618,46 +618,55 @@ public:
     return vsdk::ProtoStruct{};
   }
 
+  std::string pointcloudMime = "pointcloud/pcd";
   vsdk::Camera::point_cloud get_point_cloud(std::string mime_type,
                                             const vsdk::ProtoStruct &extra) {
-    VIAM_SDK_LOG(info) << "[next_point_cloud] start";
-    throw std::invalid_argument("next_point_cloud unimplemented");
-    //     std::chrono::time_point<std::chrono::high_resolution_clock> start;
-    //     if (debug_enabled) {
-    //       start = std::chrono::high_resolution_clock::now();
-    //     }
+    std::string serial_number;
+    {
+      const std::lock_guard<std::mutex> lock(state_mu_);
+      serial_number = state_->serial_number;
+    }
+    std::shared_ptr<ob::FrameSet> fs = nullptr;
+    {
+      std::lock_guard<std::mutex> lock(frame_set_by_serial_mu);
+      if (auto search = frame_set_by_serial.find(serial_number);
+          search == frame_set_by_serial.end()) {
+        throw std::invalid_argument("no frame yet");
+      }
+      fs = frame_set_by_serial[serial_number];
+    }
 
-    //     rs2::frame latestColorFrame;
-    //     rs2::frame latestDepthFrame;
-    //     rs2::pointcloud pc;
-    //     rs2::points points;
-    //     std::vector<unsigned char> pcdBytes;
-    //     {
-    //       std::lock_guard<std::mutex> lock(this->latest_frames_.mutex);
-    //       latestColorFrame = this->latest_frames_.colorFrame;
-    //       latestDepthFrame = this->latest_frames_.rsDepthFrame;
-    //     }
+    std::shared_ptr<ob::Frame> color = fs->getFrame(OB_FRAME_COLOR);
+    if (color == nullptr) {
+      throw std::invalid_argument("no color frame");
+    }
 
-    //     if (latestColorFrame) {
-    //       pc.map_to(latestColorFrame);
-    //     }
-    //     if (!latestDepthFrame) {
-    //       VIAM_SDK_LOG(error)
-    //           << "cannot get point cloud as there is no depth frame";
-    //       return vsdk::Camera::point_cloud{};
-    //     }
-    //     points = pc.calculate(latestDepthFrame);
-    //     pcdBytes = rsPointsToPCDBytes(points, latestColorFrame);
+    unsigned char *colorData = (unsigned char *)color->getData();
+    uint32_t colorDataSize = color->dataSize();
 
-    //     if (debug_enabled) {
-    //       auto stop = std::chrono::high_resolution_clock::now();
-    //       auto duration =
-    //           std::chrono::duration_cast<std::chrono::milliseconds>(stop -
-    //           start);
-    //       VIAM_SDK_LOG(info) << "[get_point_cloud]  total:           "
-    //                          << duration.count() << "ms\n";
-    //     }
-    //     return vsdk::Camera::point_cloud{mime_type, pcdBytes};
+    std::shared_ptr<ob::Frame> depth = fs->getFrame(OB_FRAME_DEPTH);
+    if (depth == nullptr) {
+      throw std::invalid_argument("no depth frame");
+    }
+
+    unsigned char *depthData = (unsigned char *)depth->getData();
+
+    // NOTE: UNDER LOCK
+    std::lock_guard<std::mutex> lock(devices_by_serial_mu);
+    if (auto search = devices_by_serial.find(serial_number);
+        search == devices_by_serial.end()) {
+      throw std::invalid_argument("device is not connected");
+    }
+
+    std::unique_ptr<my_device> &my_dev = devices_by_serial[serial_number];
+    if (!my_dev->started) {
+      throw std::invalid_argument("device is not started");
+    }
+
+    std::vector<unsigned char> data = RGBPointsToPCD(
+        my_dev->pointCloudFilter->process(my_dev->align->process(fs)));
+
+    return vsdk::Camera::point_cloud{pointcloudMime, data};
   }
 
   std::vector<vsdk::GeometryConfig>
