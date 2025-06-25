@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <chrono>
+#include <cstdint>
 #include <cstdio>
 #include <fstream>
 #include <iostream>
@@ -452,6 +454,11 @@ public:
       throw std::invalid_argument("color frame was not in jpeg format");
     }
 
+    // VIAM_SDK_LOG(info) << "[get_image] color frame system timestamp: "
+    //                    << color->getSystemTimeStampUs();
+    // TODO: Returen error if frame timestamp is older than 5 seconds as that
+    // indicates we no longer have a working camera
+
     unsigned char *colorData = (unsigned char *)color->getData();
     uint32_t colorDataSize = color->dataSize();
 
@@ -504,56 +511,106 @@ public:
 
     return p;
   }
+  struct raw_camera_image {
+    using deleter_type = void (*)(unsigned char *);
+    using uniq = std::unique_ptr<unsigned char[], deleter_type>;
+
+    static constexpr deleter_type free_deleter = [](unsigned char *ptr) {
+      free(ptr);
+    };
+
+    static constexpr deleter_type array_delete_deleter =
+        [](unsigned char *ptr) { delete[] ptr; };
+
+    uniq bytes;
+    size_t size;
+  };
+
+  raw_camera_image encodeDepthRAW(const unsigned char *data,
+                                  const uint64_t width, const uint64_t height,
+                                  const bool littleEndian) {
+    viam::sdk::Camera::depth_map m =
+        xt::xarray<uint16_t>::from_shape({height, width});
+    std::copy(reinterpret_cast<const uint16_t *>(data),
+              reinterpret_cast<const uint16_t *>(data) + height * width,
+              m.begin());
+
+    std::vector<unsigned char> encodedData =
+        viam::sdk::Camera::encode_depth_map(m);
+
+    unsigned char *rawBuf = new unsigned char[encodedData.size()];
+    std::memcpy(rawBuf, encodedData.data(), encodedData.size());
+
+    return raw_camera_image{
+        raw_camera_image::uniq(rawBuf, raw_camera_image::array_delete_deleter),
+        encodedData.size()};
+  }
 
   vsdk::Camera::image_collection get_images() {
-    VIAM_SDK_LOG(info) << "[get_images] start";
-    throw std::invalid_argument("get_images unimplemented");
-    //     std::chrono::time_point<std::chrono::high_resolution_clock> start;
-    //     if (debug_enabled) {
-    //       start = std::chrono::high_resolution_clock::now();
-    //     }
-    //     vsdk::Camera::image_collection response;
+    std::string serial_number;
+    {
+      const std::lock_guard<std::mutex> lock(state_mu_);
+      serial_number = state_->serial_number;
+    }
+    std::shared_ptr<ob::FrameSet> fs = nullptr;
+    {
+      std::lock_guard<std::mutex> lock(frame_set_by_serial_mu);
+      if (auto search = frame_set_by_serial.find(serial_number);
+          search == frame_set_by_serial.end()) {
+        throw std::invalid_argument("no frame yet");
+      }
+      fs = frame_set_by_serial[serial_number];
+    }
 
-    //     rs2::frame latestColorFrame;
-    //     std::shared_ptr<std::vector<uint16_t>> latestDepthFrame;
-    //     std::chrono::milliseconds latestTimestamp;
-    //     {
-    //       std::lock_guard<std::mutex> lock(this->latest_frames_.mutex);
-    //       latestColorFrame = this->latest_frames_.colorFrame;
-    //       latestDepthFrame = this->latest_frames_.depthFrame;
-    //       latestTimestamp = this->latest_frames_.timestamp;
-    //     }
+    std::shared_ptr<ob::Frame> color = fs->getFrame(OB_FRAME_COLOR);
+    if (color == nullptr) {
+      throw std::invalid_argument("no color frame");
+    }
 
-    //     for (const auto &sensor : this->props_.sensors) {
-    //       if (sensor == "color") {
-    //         std::unique_ptr<vsdk::Camera::raw_image> color_response;
-    //         color_response = encodeJPEGToResponse(
-    //             (const unsigned char *)latestColorFrame.get_data(),
-    //             this->props_.color.width, this->props_.color.height);
-    //         response.images.emplace_back(std::move(*color_response));
-    //       } else if (sensor == "depth") {
-    //         std::unique_ptr<vsdk::Camera::raw_image> depth_response;
-    //         depth_response = encodeDepthRAWToResponse(
-    //             (const unsigned char *)latestDepthFrame->data(),
-    //             this->props_.depth.width, this->props_.depth.height,
-    //             this->props_.littleEndianDepth);
-    //         response.images.emplace_back(std::move(*depth_response));
-    //       }
-    //     }
+    if (color->getFormat() != OB_FORMAT_MJPG) {
+      throw std::invalid_argument("color frame was not in jpeg format");
+    }
 
-    //     response.metadata.captured_at = vsdk::time_pt{
-    //         std::chrono::duration_cast<std::chrono::nanoseconds>(latestTimestamp)};
+    unsigned char *colorData = (unsigned char *)color->getData();
+    uint32_t colorDataSize = color->dataSize();
 
-    //     if (debug_enabled) {
-    //       auto stop = std::chrono::high_resolution_clock::now();
-    //       auto duration =
-    //           std::chrono::duration_cast<std::chrono::milliseconds>(stop -
-    //           start);
-    //       VIAM_SDK_LOG(info) << "[get_images]  total:           "
-    //                          << duration.count() << "ms\n";
-    //     }
+    vsdk::Camera::raw_image color_image;
+    color_image.source_name = "color";
+    color_image.mime_type = "image/jpeg";
+    color_image.bytes.assign(colorData, colorData + colorDataSize);
 
-    //     return response;
+    std::shared_ptr<ob::Frame> depth = fs->getFrame(OB_FRAME_DEPTH);
+    if (depth == nullptr) {
+      throw std::invalid_argument("no depth frame");
+    }
+
+    unsigned char *depthData = (unsigned char *)depth->getData();
+    auto depthVid = depth->as<ob::VideoFrame>();
+    raw_camera_image rci = encodeDepthRAW(depthData, depthVid->getWidth(),
+                                          depthVid->getHeight(), false);
+
+    vsdk::Camera::raw_image depth_image;
+    depth_image.source_name = "depth";
+    depth_image.mime_type = "image/vnd.viam.dep";
+    depth_image.bytes.assign(rci.bytes.get(), rci.bytes.get() + rci.size);
+
+    vsdk::Camera::image_collection response;
+    response.images.emplace_back(std::move(color_image));
+    response.images.emplace_back(std::move(depth_image));
+
+    uint64_t colorTS = color->getTimeStampUs();
+    uint64_t depthTS = depth->getTimeStampUs();
+    if (colorTS != depthTS) {
+      VIAM_SDK_LOG(debug) << "color and depth timestamps differ, defaulting to "
+                             "color";
+      VIAM_SDK_LOG(debug) << "color timestamp was " << colorTS
+                          << "depth timestamp was " << depthTS;
+    }
+    uint64_t timestamp = colorTS == 0 ? depthTS : colorTS;
+    std::chrono::microseconds latestTimestamp(timestamp);
+    response.metadata.captured_at = vsdk::time_pt{
+        std::chrono::duration_cast<std::chrono::nanoseconds>(latestTimestamp)};
+    return response;
   }
 
   vsdk::ProtoStruct do_command(const vsdk::ProtoStruct &command) {
