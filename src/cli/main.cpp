@@ -244,7 +244,6 @@ void startStream(std::string serialNumber, std::shared_ptr<ob::Device> dev) {
     my_dev->pipe = pipe;
     my_dev->device = dev;
     my_dev->serial_number = serialNumber;
-    my_dev->serial_number = serialNumber;
     my_dev->pointCloudFilter = pointCloudFilter;
     my_dev->align = align;
 
@@ -252,6 +251,7 @@ void startStream(std::string serialNumber, std::shared_ptr<ob::Device> dev) {
     // HACK
     pipe->start(config, [serialNumber, align, pointCloudFilter](
                             std::shared_ptr<ob::FrameSet> frameSet) {
+      std::cout << "callback called\n";
       if (frameSet->getCount() != 2) {
         std::cerr << "got non 2 frame count: " << frameSet->getCount() << "\n";
         return;
@@ -293,7 +293,6 @@ void startStream(std::string serialNumber, std::shared_ptr<ob::Device> dev) {
       std::lock_guard<std::mutex> lock(frame_set_by_serial_mu);
       frame_set_by_serial[serialNumber] = frameSet;
     });
-    OBCameraParam param = pipe->getCameraParam();
     devices_by_serial[serialNumber] = std::move(my_dev);
   }
 }
@@ -335,7 +334,7 @@ int main() {
   std::cout << "starting orbbec program" << std::endl;
 
   ob::Context ctx;
-  // ctx.setLoggerSeverity(OB_LOG_SEVERITY_DEBUG);
+  ctx.setLoggerSeverity(OB_LOG_SEVERITY_DEBUG);
 
   // listDevices(ctx);
 

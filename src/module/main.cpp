@@ -249,6 +249,7 @@ createHwD2CAlignConfig(std::shared_ptr<ob::Pipeline> pipe) {
 }
 
 void startDevice(std::string serialNumber) {
+  VIAM_SDK_LOG(info) << service_name << ": starting device " << serialNumber;
   std::lock_guard<std::mutex> lock(devices_by_serial_mu);
 
   if (auto search = devices_by_serial.find(serialNumber);
@@ -267,29 +268,31 @@ void startDevice(std::string serialNumber) {
     throw std::invalid_argument(buffer.str());
   }
 
-  my_dev->pipe->start(
-      my_dev->config, [serialNumber](std::shared_ptr<ob::FrameSet> frameSet) {
-        if (frameSet->getCount() != 2) {
-          std::cerr << "got non 2 frame count: " << frameSet->getCount()
-                    << "\n";
-          return;
-        }
-        std::shared_ptr<ob::Frame> color = frameSet->getFrame(OB_FRAME_COLOR);
-        if (color == nullptr) {
-          std::cerr << "no color frame\n" << frameSet->getCount() << "\n";
-          return;
-        }
+  auto frameCallback = [serialNumber](std::shared_ptr<ob::FrameSet> frameSet) {
+    if (frameSet->getCount() != 2) {
+      std::cerr << "got non 2 frame count: " << frameSet->getCount() << "\n";
+      return;
+    }
+    std::shared_ptr<ob::Frame> color = frameSet->getFrame(OB_FRAME_COLOR);
+    if (color == nullptr) {
+      std::cerr << "no color frame\n" << frameSet->getCount() << "\n";
+      return;
+    }
 
-        std::shared_ptr<ob::Frame> depth = frameSet->getFrame(OB_FRAME_DEPTH);
-        if (depth == nullptr) {
-          std::cerr << "no depth frame\n";
-          return;
-        }
+    std::shared_ptr<ob::Frame> depth = frameSet->getFrame(OB_FRAME_DEPTH);
+    if (depth == nullptr) {
+      std::cerr << "no depth frame\n";
+      return;
+    }
 
-        std::lock_guard<std::mutex> lock(frame_set_by_serial_mu);
-        frame_set_by_serial[serialNumber] = frameSet;
-      });
+    std::lock_guard<std::mutex> lock(frame_set_by_serial_mu);
+    frame_set_by_serial[serialNumber] = frameSet;
+    VIAM_SDK_LOG(info) << service_name << ": set frame" << serialNumber;
+  };
+
+  my_dev->pipe->start(my_dev->config, std::move(frameCallback));
   my_dev->started = true;
+  VIAM_SDK_LOG(info) << service_name << ": device started " << serialNumber;
 }
 
 void stopDevice(std::string serialNumber) {
@@ -343,9 +346,10 @@ void registerDevice(std::string serialNumber, std::shared_ptr<ob::Device> dev) {
     my_dev->pipe = pipe;
     my_dev->device = dev;
     my_dev->serial_number = serialNumber;
-    my_dev->serial_number = serialNumber;
     my_dev->pointCloudFilter = pointCloudFilter;
     my_dev->align = align;
+    my_dev->config = config;
+
     devices_by_serial[serialNumber] = std::move(my_dev);
   }
 }
@@ -384,7 +388,6 @@ void listDevices(const ob::Context &ctx) {
 }
 
 class Orbbec : public vsdk::Camera, public vsdk::Reconfigurable {
-
 public:
   Orbbec(vsdk::Dependencies deps, vsdk::ResourceConfig cfg)
       : Camera(cfg.name()),
@@ -438,92 +441,25 @@ public:
           search == frame_set_by_serial.end()) {
         throw std::invalid_argument("no frame yet");
       }
-      fs = devices_by_serial[serial_number];
+      fs = frame_set_by_serial[serial_number];
     }
-    std::shared_ptr<ob::Frame> color = frameSet->getFrame(OB_FRAME_COLOR);
+    std::shared_ptr<ob::Frame> color = fs->getFrame(OB_FRAME_COLOR);
     if (color == nullptr) {
       throw std::invalid_argument("no color frame");
     }
-    // NICK: Encode the response
 
-    // void *colorData = color->getData();
-    // uint32_t colorDataSize = color->dataSize();
-    // std::ofstream colorOutFile("color.jpeg",
-    //                            std::ios::out | std::ios::binary);
-    // colorOutFile.write(reinterpret_cast<const char *>(colorData),
-    //                    colorDataSize);
-    // colorOutFile.close();
+    if (color->getFormat() != OB_FORMAT_MJPG) {
+      throw std::invalid_argument("color frame was not in jpeg format");
+    }
 
-    // TODO: Detect when frame is stale
+    unsigned char *colorData = (unsigned char *)color->getData();
+    uint32_t colorDataSize = color->dataSize();
 
-    //     if (debug_enabled) {
-    //       VIAM_SDK_LOG(info) << "[get_image] start";
-    //     }
-    //     try {
-    //       std::chrono::time_point<std::chrono::high_resolution_clock> start;
-    //       if (debug_enabled) {
-    //         start = std::chrono::high_resolution_clock::now();
-    //       }
-
-    //       rs2::frame latestColorFrame;
-    //       std::shared_ptr<std::vector<uint16_t>> latestDepthFrame;
-    //       {
-    //         std::lock_guard<std::mutex> lock(this->latest_frames_.mutex);
-    //         latestColorFrame = this->latest_frames_.colorFrame;
-    //         latestDepthFrame = this->latest_frames_.depthFrame;
-    //       }
-    //       std::unique_ptr<vsdk::Camera::raw_image> response;
-    //       if (this->props_.mainSensor.compare("color") == 0) {
-    //         if (this->device_->disableColor) {
-    //           throw std::invalid_argument("color disabled");
-    //         }
-    //         if (mime_type.compare("image/png") == 0 ||
-    //             mime_type.compare("image/png+lazy") == 0) {
-    //           response = encodeColorPNGToResponse(
-    //               (const void *)latestColorFrame.get_data(),
-    //               this->props_.color.width, this->props_.color.height);
-    //         } else if (mime_type.compare("image/vnd.viam.rgba") == 0) {
-    //           response = encodeColorRAWToResponse(
-    //               (const unsigned char *)latestColorFrame.get_data(),
-    //               this->props_.color.width, this->props_.color.height);
-    //         } else {
-    //           response = encodeJPEGToResponse(
-    //               (const unsigned char *)latestColorFrame.get_data(),
-    //               this->props_.color.width, this->props_.color.height);
-    //         }
-    //       } else if (this->props_.mainSensor.compare("depth") == 0) {
-    //         if (this->device_->disableDepth) {
-    //           throw std::invalid_argument("depth disabled");
-    //         }
-    //         if (mime_type.compare("image/vnd.viam.dep") == 0) {
-    //           response = encodeDepthRAWToResponse(
-    //               (const unsigned char *)latestDepthFrame->data(),
-    //               this->props_.depth.width, this->props_.depth.height,
-    //               this->props_.littleEndianDepth);
-    //         } else {
-    //           response = encodeDepthPNGToResponse(
-    //               (const unsigned char *)latestDepthFrame->data(),
-    //               this->props_.depth.width, this->props_.depth.height);
-    //         }
-    //       }
-
-    //       if (debug_enabled) {
-    //         auto stop = std::chrono::high_resolution_clock::now();
-    //         auto duration =
-    //             std::chrono::duration_cast<std::chrono::milliseconds>(stop -
-    //             start);
-    //         VIAM_SDK_LOG(info) << "[get_image]  total:           "
-    //                            << duration.count() << "ms\n";
-    //       }
-
-    //       if (debug_enabled) {
-    //         VIAM_SDK_LOG(info) << "[get_image] end";
-    //       }
-    //       return std::move(*response);
-    //     } catch (const std::exception &e) {
-    //       VIAM_SDK_LOG(error) << "[get_image] failed to get image: " <<
-    //       e.what(); throw;
-    //     }
+    vsdk::Camera::raw_image response;
+    response.source_name = "color";
+    response.mime_type = "image/jpeg";
+    response.bytes.assign(colorData, colorData + colorDataSize);
+    return response;
   }
 
   vsdk::Camera::properties get_properties() {
@@ -806,6 +742,8 @@ int serve(int argc, char **argv) try {
   vsdk::Instance inst;
 
   ob::Context ctx;
+  // TODO: Make this enabled when user boots at debug level
+  // ctx.setLoggerSeverity(OB_LOG_SEVERITY_DEBUG);
   startOrbbecSDK(ctx);
 
   // Create a new model registration for the service.
