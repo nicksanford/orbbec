@@ -32,7 +32,7 @@ endef
 
 appimage: export OUTPUT_NAME = viam-camera-orbbec
 appimage: export ARCH = x86_64
-# appimage: orbbec
+appimage: orbbec
  appimage: 
 	$(call BUILD_APPIMAGE,$(OUTPUT_NAME),$(ARCH))
 	cp ./packaging/appimages/$(OUTPUT_NAME)-*-$(ARCH).AppImage ./packaging/appimages/deploy/

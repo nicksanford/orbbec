@@ -3,20 +3,16 @@ script:
  - rm -rf AppDir || true
  - mkdir -p $TARGET_APPDIR/usr/bin $TARGET_APPDIR/usr/lib 
  - cp ../../build-conan/build/RelWithDebInfo/orbbec-module $TARGET_APPDIR/usr/bin/
- - cp ../../lib $TARGET_APPDIR/usr/lib/
- - mkdir -p $TARGET_PPDIR/usr/share/icons/viam/256x256/apps/
- - cp ./viam-server.png $TARGET_APPDIR/usr/share/icons/viam/256x256/apps/viam-server.png
+ - cp -r ../../lib $TARGET_APPDIR/usr/lib/
  - go install github.com/Otterverse/aix@latest
  - cp `go env GOPATH`/bin/aix $TARGET_APPDIR/usr/bin/
  - chmod 755 $TARGET_APPDIR/usr/bin/*
-  fi
 
 AppDir:
   path: ./AppDir
   app_info:
     id: com.viam.cameraorbbec
     name: viam-camera-orbbec
-    icon: viam-server
     version: "latest"
     exec: usr/bin/aix
     exec_args: $@
@@ -41,5 +37,4 @@ AppDir:
         AIX_TARGET: usr/bin/orbbec-module
 AppImage:
   arch: x86_64
-  comp: gzip
   update-information: zsync|http://packages.viam.com/apps/camera-servers/viam-camera-orbbec-latest-x86_64.AppImage.zsync
