@@ -3,9 +3,15 @@ ARCH ?= $(shell uname -m)
 OUTPUT_NAME = orbbec-module
 BIN := build-conan/build/RelWithDebInfo/orbbec-module
 TAG_VERSION?=latest
-APPIMAGE := ./packaging/appimages/deploy/$(OUTPUT_NAME)-$(TAG_VERSION)-$(ARCH).AppImage
+APPIMAGE := packaging/appimages/deploy/$(OUTPUT_NAME)-$(TAG_VERSION)-$(ARCH).AppImage
 
 .PHONY: build lint setup appimage
+
+module.tar.gz: $(APPIMAGE) meta.json
+	cp $(APPIMAGE) $(OUTPUT_NAME).AppImage
+	tar -czvf module.tar.gz $(OUTPUT_NAME).AppImage meta.json
+	rm $(OUTPUT_NAME).AppImage
+
 build: $(BIN)
 
 $(BIN): lint conanfile.py src/* bin/*
@@ -16,12 +22,6 @@ clean:
 
 setup:
 	bin/setup.sh
-
-module.tar.gz: $(APPIMAGE) meta.json
-	cp $(APPIMAGE) $(OUTPUT_NAME).AppImage
-	tar -czvf module.tar.gz $(OUTPUT_NAME).AppImage meta.json
-	rm $(OUTPUT_NAME).AppImage
-
 
 lint:
 	./bin/run-clang-format.sh
