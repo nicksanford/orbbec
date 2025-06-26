@@ -1,35 +1,35 @@
+OS ?= $(shell uname -s | tr '[:upper:]' '[:lower:]')
+ARCH ?= $(shell uname -m)
+OUTPUT_NAME = orbbec-module
 BIN := build-conan/build/RelWithDebInfo/orbbec-module
+TAG_VERSION?=latest
+APPIMAGE := ./packaging/appimages/deploy/$(OUTPUT_NAME)-$(TAG_VERSION)-$(ARCH).AppImage
 
-.PHONY: orbbec lint setup appimage
-orbbec: $(BIN)
+.PHONY: build lint setup appimage
+build: $(BIN)
 
-$(BIN): conanfile.py src/* bin/*
+$(BIN): lint conanfile.py src/* bin/*
 	bin/build.sh
 
 clean:
-	rm -rf build build-conan
+	rm -rf packaging/appimages/deploy
 
 setup:
 	bin/setup.sh
 
-module.tar.gz: $(BIN) meta.json
-	bin/package.sh $^
+module.tar.gz: $(APPIMAGE) meta.json
+	cp $(APPIMAGE) $(OUTPUT_NAME).AppImage
+	tar -czvf module.tar.gz $(OUTPUT_NAME).AppImage meta.json
+	rm $(OUTPUT_NAME).AppImage
+
 
 lint:
 	./bin/run-clang-format.sh
 
-TAG_VERSION?=latest
-# Define a function for building AppImages
-define BUILD_APPIMAGE
-    export TAG_NAME=$(TAG_VERSION); \
-    cd packaging/appimages && \
-    mkdir -p deploy && \
-    rm -f deploy/$(1)* && \
-    appimage-builder --recipe $(1)-$(2).yml
-endef
-
-appimage: export OUTPUT_NAME = viam-camera-orbbec
-appimage: export ARCH = x86_64
-appimage: orbbec
-	$(call BUILD_APPIMAGE,$(OUTPUT_NAME),$(ARCH))
-	cp ./packaging/appimages/$(OUTPUT_NAME)-*-$(ARCH).AppImage ./packaging/appimages/deploy/
+$(APPIMAGE): $(BIN)
+	export TAG_NAME=$(TAG_VERSION); \
+	cd packaging/appimages && \
+	mkdir -p deploy && \
+	rm -f deploy/$(OUTPUT_NAME)* && \
+	appimage-builder --recipe $(OUTPUT_NAME)-$(ARCH).yml
+	cp ./packaging/appimages/$(OUTPUT_NAME)-$(TAG_VERSION)-$(ARCH).AppImage ./packaging/appimages/deploy/

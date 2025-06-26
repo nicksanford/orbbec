@@ -15,13 +15,13 @@
 # limitations under the License.
 
 # Set up the linter
-if ! command -v clang-format &> /dev/null; then
+if ! command -v clang-format-19 &> /dev/null; then
 	# It's not yet installed, so let's get it!
 	echo "Installing clang-format as a linter..."
 	if [[ "$(uname)" == "Linux" ]]; then
-		sudo apt install clang-format
+		sudo apt install -y clang-format-19
 	elif [[ "$(uname)" == "Darwin" ]]; then
-		brew install clang-format
+		brew install clang-format-19
 	else
 		echo "WARNING: installing the linter is not yet supported outside of Linux and Mac."
 	fi

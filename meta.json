@@ -18,5 +18,5 @@
       "short_description": "Orbbec Astra2 driver return images, depth maps and pointclouds"
     }
   ],
-  "entrypoint": "module.tar.gz"
+  "entrypoint": "orbbec-module.AppImage"
 }
