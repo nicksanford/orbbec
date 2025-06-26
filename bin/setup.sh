@@ -3,17 +3,38 @@
 #     -u: it's an error to use an undefined variable
 #     -x: print out every command before it runs
 #     -o pipefail: if something in the middle of a pipeline fails, the whole thing fails
+#
 set -euxo pipefail
 
+# NOTE: this is written under the assumption that it will be built in canon
+sudo apt install -y cmake python3.11 python3.11-venv
+
+if [ ! -f "./venv/bin/activate" ]; then
+  echo 'creating and sourceing virtual env'
+  python3 -m venv venv && source ./venv/bin/activate 
+else
+  echo 'sourcing virtual env'
+  source ./venv/bin/activate
+fi
+
 # Set up conan
-conan --version > /dev/null 2>&1 || python -m pip install conan
+if [ ! -f "./venv/bin/conan" ]; then
+  echo 'sourcing virtual env'
+  python3 -m pip install conan
+fi
+
 conan profile detect || echo "Conan is already installed"
 
-# Clone the C++ SDK repo
-mkdir -p tmp_cpp_sdk
-pushd tmp_cpp_sdk
-# git clone https://github.com/viamrobotics/viam-cpp-sdk.git
-pushd viam-cpp-sdk
+if [ ! -d "tmp_cpp_sdk/viam-cpp-sdk" ]; then
+  # Clone the C++ SDK repo
+  mkdir -p tmp_cpp_sdk
+  pushd tmp_cpp_sdk
+  git clone https://github.com/viamrobotics/viam-cpp-sdk.git
+  pushd viam-cpp-sdk
+else
+  pushd tmp_cpp_sdk
+  pushd viam-cpp-sdk
+fi
 
 # NOTE: If you change this version, also change it in the `conanfile.py` requirements
 git checkout releases/v0.14.0

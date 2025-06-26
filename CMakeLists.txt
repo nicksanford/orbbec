@@ -4,19 +4,19 @@ project(orbbec)
 
 set(CMAKE_PROJECT_VERSION 0.0.1)
 set(CMAKE_CXX_STANDARD 17)
-project(tflite_cpu
-    DESCRIPTION "Viam module for tflite inference  on the CPU"
+project(viam-orbbec
+    DESCRIPTION "Viam module for orbbec cameras"
     HOMEPAGE_URL https://github.com/viam-modules/orbbec
     LANGUAGES CXX
 )
-
-set(BUILD_SHARED_LIBS OFF)
 
 add_executable(orbbec-cli src/cli/main.cpp)
 add_executable(orbbec-module src/module/main.cpp)
 
 set(OrbbecSDK_DIR lib/orbbecsdk/lib)
+
 include_directories(include)
+
 find_package(OrbbecSDK REQUIRED
     PATHS lib/
     NO_DEFAULT_PATH)
@@ -33,4 +33,3 @@ PRIVATE ob::OrbbecSDK
 PRIVATE Threads::Threads
 PRIVATE viam-cpp-sdk::viamsdk
 )
-

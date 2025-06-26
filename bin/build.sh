@@ -8,7 +8,7 @@ set -euxo pipefail
 # Clean up any prior build
 rm -rf build-conan
 
-# Build the tflite_cpu module
+# Build the viam-orbbec module
 #
 # We want a static binary, so we turn off shared. Elect for C++17
 # compilation, since it seems some of the dependencies we pick mandate
@@ -19,6 +19,11 @@ rm -rf build-conan
 # the actual module build gets built with an override to `RelWithDebInfo`, which we
 # don't want to have accidentally affect our dependencies (it makes the build far too large).
 # The override itself is derived from https://github.com/conan-io/conan/issues/12656.
+#
+if [ -f "./venv/bin/activate" ]; then
+  echo 'sourcing virtual env'
+  source ./venv/bin/activate
+fi
 
 conan install . \
       --build=missing \

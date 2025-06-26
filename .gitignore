@@ -2,3 +2,4 @@ build/
 packaging/appimages/deploy
 packaging/appimages/appimage-build
 packaging/appimages/AppDir
+venv

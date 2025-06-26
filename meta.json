@@ -4,17 +4,19 @@
     "setup": "make setup",
     "build": "make module.tar.gz",
     "arch": [
-      "linux/amd64",
+      "linux/amd64"
     ]
   },
   "visibility": "public",
   "url": "https://github.com/viam-modules/orbbec",
-  "description": "Camera orbbec models.",
+  "description": "C++ camera module for Orbbec cameras",
   "models": [
     {
       "api": "rdk:component:camera",
-      "model": "viam:orbbec:astra2"
+      "markdown_link": "README.md#configure-your-orbbec-camera",
+      "model": "viam:orbbec:astra2",
+      "short_description": "Orbbec Astra2 driver return images, depth maps and pointclouds"
     }
   ],
-  "entrypoint": "build-conan/build/RelWithDebInfo/tflite_cpu"
+  "entrypoint": "module.tar.gz"
 }
