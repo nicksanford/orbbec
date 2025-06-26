@@ -7,7 +7,7 @@
 set -euxo pipefail
 
 # NOTE: this is written under the assumption that it will be built in canon
-sudo apt install -y cmake python3.11 python3.11-venv
+sudo apt -y update && sudo apt -y upgrade && sudo apt install -y cmake python3.11 python3.11-venv
 
 if [ ! -f "./venv/bin/activate" ]; then
   echo 'creating and sourceing virtual env'
