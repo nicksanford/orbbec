@@ -37,7 +37,7 @@ The following attributes are available for this model:
 **Unable to connect to camera**
 
 The `first_run.sh` script included in this module should automatically install the `udev` rules for connecting to the camera on Linux devices.
-If there is an issue, try copying `99-obsensor-libusb.rules` in the `scripts/` directory of this repo to `/etc/udev/rules.d/` on the Viam machine and calling the following command on the system:
+If there is an issue, try copying `99-obsensor-libusb.rules` in the root directory of this repo to `/etc/udev/rules.d/` on the Viam machine and calling the following command on the system:
 
 ```
 sudo udevadm control --reload-rules && sudo udevadm trigger
