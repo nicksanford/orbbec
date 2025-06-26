@@ -27,4 +27,4 @@ if ! command -v clang-format &> /dev/null; then
 	fi
 fi
 
-find ./src -not -path "./src/viam/api" -type f \( -name \*.cpp -o -name \*.hpp \) | xargs clang-format -style=file -i -fallback-style=none "$@"
+find ./src  -type f \( -name \*.cpp -o -name \*.hpp \)  | xargs clang-format-19 -i --style=file "$@"
